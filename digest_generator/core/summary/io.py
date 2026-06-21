@@ -117,7 +117,7 @@ def _serialize(summary: Summary) -> dict[str, Any]:
     if summary.entry.content_head:
         payload["content_head"] = summary.entry.content_head
     if summary.entry.content_type is not None:
-        payload["content_type"] = summary.entry.content_type.value
+        payload["content_type"] = summary.entry.content_type
     if summary.entry.fetched_at is not None:
         payload["fetched_at"] = summary.entry.fetched_at.isoformat()
     return payload

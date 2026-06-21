@@ -15,9 +15,9 @@ from typing import Any
 
 from ollama import Client
 
+from digest_generator.core.categories import CategorySet, category_registry
 from digest_generator.core.digest.prompts import load_prompt
 from digest_generator.core.digest.types import Cluster, SectionDraft, WatchItem
-from digest_generator.core.types import ContentType
 from digest_generator.shared.llm.clients import client_registry
 from digest_generator.shared.llm.sampling import SamplingConfig, resolve_ollama_options
 from digest_generator.shared.llm.telemetry import chat_with_logging
@@ -48,10 +48,12 @@ class WhatToWatch:
         client: Client | None = None,
         model: str | None = None,
         sampling: SamplingConfig | None = None,
+        categories: CategorySet | None = None,
     ):
         self._client = client or client_registry.ollama
         self.model = model or settings.watcher_model or settings.writer_model
         self._sampling = sampling
+        self._categories = categories or category_registry.active
 
     def generate(
         self,
@@ -102,8 +104,8 @@ class WhatToWatch:
             )
             return items
 
-    @staticmethod
     def _build_user_prompt(
+        self,
         sections: list[SectionDraft],
         *,
         lede_intro: str | None = None,
@@ -132,7 +134,7 @@ class WhatToWatch:
                 ]
             )
         if clusters:
-            lines.extend(_format_cluster_index(clusters))
+            lines.extend(_format_cluster_index(clusters, self._categories))
             lines.append("")
         lines.append("<sections>")
         for section in sections:
@@ -165,7 +167,7 @@ class WhatToWatch:
         )
 
 
-def _format_cluster_index(clusters: list[Cluster]) -> list[str]:
+def _format_cluster_index(clusters: list[Cluster], categories: CategorySet) -> list[str]:
     """Render the ``<clusters>`` block listing every story cluster for the watcher.
 
     Each cluster appears as one element: ``id`` and ``primary`` (display
@@ -192,22 +194,14 @@ def _format_cluster_index(clusters: list[Cluster]) -> list[str]:
     for c in ordered:
         if not c.lede or not c.primary_section:
             continue
-        primary_display = _primary_display_name(c.primary_section)
-        secondaries = ",".join(_primary_display_name(s) for s in c.secondary_sections)
+        primary_display = categories.title(c.primary_section)
+        secondaries = ",".join(categories.title(s) for s in c.secondary_sections)
         attr = f'id="{c.id}" primary="{primary_display}"'
         if secondaries:
             attr += f' secondaries="{secondaries}"'
         lines.append(f"  <cluster {attr}>{c.lede}</cluster>")
     lines.append("</clusters>")
     return lines
-
-
-def _primary_display_name(primary_section: str) -> str:
-    """Render a ContentType value as its display name; pass through on miss."""
-    try:
-        return ContentType(primary_section).display_name
-    except ValueError:
-        return primary_section
 
 
 def _parse_watch_items(raw: str) -> list[WatchItem]:

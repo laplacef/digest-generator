@@ -1,7 +1,7 @@
 """Story-cluster stage for the digest pipeline.
 
 ``ArticleClusterer`` groups articles describing the same story and picks
-each cluster's primary ``ContentType`` (the section that owns the full
+each cluster's primary category (the section that owns the full
 writeup) plus optional secondary sections that should cross-reference
 rather than expand the story. The downstream writer consumes the result
 so a story M&A in three sections gets one full paragraph plus two
@@ -33,9 +33,9 @@ import json
 import re
 from typing import TYPE_CHECKING, Any
 
+from digest_generator.core.categories import CategorySet, category_registry
 from digest_generator.core.digest.prompts import load_prompt
 from digest_generator.core.digest.types import Cluster
-from digest_generator.core.types import ContentType
 from digest_generator.shared.llm.clients import client_registry
 from digest_generator.shared.llm.sampling import SamplingConfig, resolve_ollama_options
 from digest_generator.shared.llm.telemetry import chat_with_logging
@@ -67,6 +67,8 @@ class ArticleClusterer:
         sampling: Per-call sampling overrides (``temperature``, ``top_p``,
                 ``repetition_penalty``, ``seed``). Unset fields fall back to
                 the matching ``clusterer_*`` settings.
+        categories: Section set used to validate cluster routing. Defaults to
+                the configured category set from ``category_registry``.
     """
 
     def __init__(
@@ -74,10 +76,12 @@ class ArticleClusterer:
         client: Client | None = None,
         model: str | None = None,
         sampling: SamplingConfig | None = None,
+        categories: CategorySet | None = None,
     ) -> None:
         self._client = client or client_registry.ollama
         self.model = model or settings.clusterer_model or settings.writer_model
         self._sampling = sampling
+        self._categories = categories or category_registry.active
 
     def cluster(self, results: dict[str, list[dict[str, Any]]]) -> list[Cluster]:
         """Cluster pre-joined article dicts (one entry per article) into stories.
@@ -101,9 +105,10 @@ class ArticleClusterer:
             # Build an id-to-article index up-front so every code path (LLM
             # success, LLM failure, partial coverage) can backfill cleanly.
             indexed = _assign_article_ids(articles)
-            clusters, strategy = self._cluster_via_llm(indexed)
+            valid_sections = self._categories.id_set()
+            clusters, strategy = self._cluster_via_llm(indexed, valid_sections)
             if not clusters:
-                clusters = _trivial_fallback(indexed)
+                clusters = _trivial_fallback(indexed, valid_sections)
                 strategy = "trivial_one_per_article"
 
             primary_counts: dict[str, int] = {}
@@ -121,7 +126,7 @@ class ArticleClusterer:
             return clusters
 
     def _cluster_via_llm(
-        self, indexed: list[tuple[str, dict[str, Any]]]
+        self, indexed: list[tuple[str, dict[str, Any]]], valid_sections: frozenset[str]
     ) -> tuple[list[Cluster], str]:
         """Run the LLM clustering call and validate the response.
 
@@ -149,7 +154,7 @@ class ArticleClusterer:
         if parsed is None:
             return [], "llm_malformed"
 
-        clusters = _validate_and_normalize(parsed, indexed)
+        clusters = _validate_and_normalize(parsed, indexed, valid_sections)
         if not clusters:
             logger.warning("Clusterer returned no valid clusters; falling back to one-per-article")
             return [], "llm_no_valid_clusters"
@@ -299,12 +304,10 @@ def _parse_clusters_json(raw: str) -> list[dict[str, Any]] | None:
     return [item for item in data if isinstance(item, dict)]
 
 
-_VALID_SECTIONS: frozenset[str] = frozenset(ct.value for ct in ContentType)
-
-
 def _validate_and_normalize(
     raw_clusters: list[dict[str, Any]],
     indexed: list[tuple[str, dict[str, Any]]],
+    valid_sections: frozenset[str],
 ) -> list[Cluster]:
     """Validate LLM-emitted clusters, backfill missing articles, re-id canonically.
 
@@ -340,13 +343,15 @@ def _validate_and_normalize(
         if not article_ids:
             continue
 
-        primary = _coerce_section(raw.get("primary_section", ""))
+        primary = _coerce_section(raw.get("primary_section", ""), valid_sections)
         if not primary:
-            primary = _majority_content_type([by_id[aid] for aid in article_ids])
+            primary = _majority_content_type([by_id[aid] for aid in article_ids], valid_sections)
         if not primary:
             continue  # cluster has no defensible section; backfill will pick up its articles
 
-        secondary = _coerce_secondary_sections(raw.get("secondary_sections", []), primary)
+        secondary = _coerce_secondary_sections(
+            raw.get("secondary_sections", []), primary, valid_sections
+        )
         lede = _clean(str(raw.get("lede", ""))) or _clean(by_id[article_ids[0]].get("title", ""))
         entities = _coerce_entities(raw.get("entities", []))
 
@@ -371,7 +376,7 @@ def _validate_and_normalize(
     for aid, article in indexed:
         if aid in assigned:
             continue
-        primary = _coerce_section(article.get("content_type", ""))
+        primary = _coerce_section(article.get("content_type", ""), valid_sections)
         url = str(article.get("url", ""))
         accepted.append(
             Cluster(
@@ -398,11 +403,11 @@ def _validate_and_normalize(
     ]
 
 
-def _coerce_section(value: Any) -> str:
-    """Return the section string if it's a valid ContentType, else ``""``."""
+def _coerce_section(value: Any, valid_sections: frozenset[str]) -> str:
+    """Return the section string if it's a known category id, else ``""``."""
     if not isinstance(value, str):
         return ""
-    return value if value in _VALID_SECTIONS else ""
+    return value if value in valid_sections else ""
 
 
 _MAX_ENTITIES = 4
@@ -438,14 +443,16 @@ def _coerce_entities(value: Any) -> list[str]:
     return out
 
 
-def _coerce_secondary_sections(value: Any, primary: str) -> list[str]:
-    """Filter to valid ContentType values, drop ``primary``, dedupe, cap at 2."""
+def _coerce_secondary_sections(
+    value: Any, primary: str, valid_sections: frozenset[str]
+) -> list[str]:
+    """Filter to known category ids, drop ``primary``, dedupe, cap at 2."""
     if not isinstance(value, list):
         return []
     out: list[str] = []
     seen: set[str] = set()
     for item in value:
-        section = _coerce_section(item)
+        section = _coerce_section(item, valid_sections)
         if not section or section == primary or section in seen:
             continue
         out.append(section)
@@ -455,7 +462,7 @@ def _coerce_secondary_sections(value: Any, primary: str) -> list[str]:
     return out
 
 
-def _majority_content_type(articles: list[dict[str, Any]]) -> str:
+def _majority_content_type(articles: list[dict[str, Any]], valid_sections: frozenset[str]) -> str:
     """Pick the most common valid ``content_type`` across the cluster.
 
     Ties broken by input order (first-seen wins). Returns ``""`` when
@@ -463,7 +470,7 @@ def _majority_content_type(articles: list[dict[str, Any]]) -> str:
     """
     counts: dict[str, int] = {}
     for article in articles:
-        ct = _coerce_section(article.get("content_type", ""))
+        ct = _coerce_section(article.get("content_type", ""), valid_sections)
         if ct:
             counts[ct] = counts.get(ct, 0) + 1
     if not counts:
@@ -471,7 +478,9 @@ def _majority_content_type(articles: list[dict[str, Any]]) -> str:
     return max(counts.items(), key=lambda kv: kv[1])[0]
 
 
-def _trivial_fallback(indexed: list[tuple[str, dict[str, Any]]]) -> list[Cluster]:
+def _trivial_fallback(
+    indexed: list[tuple[str, dict[str, Any]]], valid_sections: frozenset[str]
+) -> list[Cluster]:
     """Emit one size-1 cluster per article with no cross-section refs.
 
     Primary section is the article's fetched ``content_type`` when
@@ -484,7 +493,7 @@ def _trivial_fallback(indexed: list[tuple[str, dict[str, Any]]]) -> list[Cluster
     for index, (_aid, article) in enumerate(indexed, start=1):
         url = str(article.get("url", ""))
         title = _clean(article.get("title", ""))
-        primary = _coerce_section(article.get("content_type", ""))
+        primary = _coerce_section(article.get("content_type", ""), valid_sections)
         clusters.append(
             Cluster(
                 id=f"c{index:04d}",

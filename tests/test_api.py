@@ -33,7 +33,7 @@ from digest_generator.core.label.io import (
     save_labeled,
 )
 from digest_generator.core.summary.io import save_summarized
-from digest_generator.core.types import ContentType, Entry, Filter, Label, Summary, TopicType
+from digest_generator.core.types import Entry, Filter, Label, Summary, TopicType
 from digest_generator.sources.rss.io import save_entries
 from digest_generator.sources.rss.types import Feed
 
@@ -52,11 +52,11 @@ def feed():
     return Feed(
         name="openai-news",
         url="https://example.com/feed",
-        content_type=ContentType.AI,
+        content_type="ai",
     )
 
 
-def _entry(now, *, url="https://example.com/1", title="GPT-5", content_type=ContentType.AI):
+def _entry(now, *, url="https://example.com/1", title="GPT-5", content_type="ai"):
     """Test entry fixture. ``content_type`` defaults to AI so iter_fetched
     in the flat layout can determine the section bucket from entry data
     without a directory tier. ``origin`` is the feed slug."""
@@ -107,12 +107,12 @@ class TestFetch:
         good_feed = Feed(
             name="good",
             url="https://example.com/good",
-            content_type=ContentType.AI,
+            content_type="ai",
         )
         bad_feed = Feed(
             name="bad",
             url="https://example.com/bad",
-            content_type=ContentType.SECURITY,
+            content_type="security",
         )
 
         async def side_effect(feed, _filter):
@@ -146,12 +146,12 @@ class TestFetch:
         cached_feed = Feed(
             name="cached",
             url="https://example.com/a",
-            content_type=ContentType.AI,
+            content_type="ai",
         )
         new_feed = Feed(
             name="new",
             url="https://example.com/b",
-            content_type=ContentType.SECURITY,
+            content_type="security",
         )
         save_entries(tmp_path, "cached", [_entry(now)])
 

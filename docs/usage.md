@@ -53,7 +53,7 @@ The tool ships with no feeds; you supply them in a `feeds.yaml`. Copy [`feeds.ex
 3. `./digest-generator/feeds.yaml` (project-local)
 4. `~/.config/digest-generator/feeds.yaml` (user-level)
 
-Each feed needs a `name`, a `url`, and a `category` (one of `ai`, `engineering`, `infrastructure`, `security`, `business`). A missing or invalid file produces an actionable error pointing back at the example.
+The file defines your own `categories:` (the digest sections, each an `id` + `title`, in section order) and a `feeds:` list where each feed's `category` matches one of those ids. Categories are user-defined, so the section taxonomy is whatever you put in the file. A missing or invalid file produces an actionable error pointing back at the example.
 
 ### `run`: Full Pipeline
 
@@ -195,7 +195,7 @@ digest-generator feeds --feeds path/to/feeds.yaml
 | `--feeds` | | Path to a `feeds.yaml` file (overrides discovery) | `FEEDS_FILE` env / discovery |
 | `--config` | | Config directory holding `feeds.yaml` | `DIGEST_CONFIG` env / discovery |
 
-Valid content types: `ai`, `business`, `engineering`, `infrastructure`, `security`.
+Content types are the category ids defined in your `feeds.yaml`.
 
 ## Programmatic API
 

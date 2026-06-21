@@ -1,7 +1,7 @@
 """Tests for digest_generator/core/types.py: cross-stage domain vocabulary.
 
-`Entry`, `Summary`, `ContentType`, `Filter`, `Label`, `TopicType` are
-the types every pipeline stage shares.
+`Entry`, `Summary`, `Filter`, `Label`, `TopicType` are the types every
+pipeline stage shares.
 """
 
 import json
@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from digest_generator.core.types import ContentType, Entry, Filter, Label, TopicType
+from digest_generator.core.types import Entry, Filter, Label, TopicType
 
 # =============================================================================
 # Enum tests
@@ -33,42 +33,6 @@ class TestTopicType:
         """StrEnum values should work directly in JSON without .value."""
         data = {"topic": TopicType.LLM}
         assert '"large-language-models"' in json.dumps(data)
-
-
-class TestContentType:
-    """Five content types used as the digest section grouping."""
-
-    def test_values(self):
-        assert ContentType.AI == "ai"
-        assert ContentType.ENGINEERING == "engineering"
-        assert ContentType.INFRASTRUCTURE == "infrastructure"
-        assert ContentType.SECURITY == "security"
-        assert ContentType.BUSINESS == "business"
-
-    def test_count(self):
-        assert len(ContentType) == 5
-
-    def test_display_name_ai(self):
-        """AI has a special display name."""
-        assert ContentType.AI.display_name == "AI & Machine Learning"
-
-    def test_display_name_others(self):
-        """Non-AI types capitalize the enum name."""
-        assert ContentType.ENGINEERING.display_name == "Engineering"
-        assert ContentType.SECURITY.display_name == "Security"
-        assert ContentType.BUSINESS.display_name == "Business"
-        assert ContentType.INFRASTRUCTURE.display_name == "Infrastructure"
-
-    def test_enum_order_defines_digest_sections(self):
-        """ContentType iteration order is the digest section order."""
-        order = list(ContentType)
-        assert order == [
-            ContentType.AI,
-            ContentType.ENGINEERING,
-            ContentType.INFRASTRUCTURE,
-            ContentType.SECURITY,
-            ContentType.BUSINESS,
-        ]
 
 
 # =============================================================================
@@ -249,9 +213,9 @@ class TestEntry:
         entry = Entry(
             **self._required_kwargs(now),
             source_type="rss",
-            content_type=ContentType.AI,
+            content_type="ai",
             fetched_at=fetched,
         )
         assert entry.source_type == "rss"
-        assert entry.content_type is ContentType.AI
+        assert entry.content_type == "ai"
         assert entry.fetched_at == fetched

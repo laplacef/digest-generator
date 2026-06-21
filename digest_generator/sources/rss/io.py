@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from digest_generator.core.types import ContentType, Entry
+from digest_generator.core.types import Entry
 from digest_generator.shared.logging import logger
 
 _FETCHED_DIR = "source-fetched"
@@ -68,7 +68,7 @@ def load_entries(run_dir: Path, feed_name: str) -> list[Entry] | None:
 
 def iter_fetched(
     run_dir: Path,
-) -> Iterator[tuple[ContentType, str, list[Entry]]]:
+) -> Iterator[tuple[str, str, list[Entry]]]:
     """Yield ``(content_type, feed_name, entries)`` for every fetched batch.
 
     Walks ``<run_dir>/source-fetched/*.json``. ``content_type`` is
@@ -129,7 +129,7 @@ def _serialize(entry: Entry) -> dict[str, Any]:
     if entry.content_head:
         payload["content_head"] = entry.content_head
     if entry.content_type is not None:
-        payload["content_type"] = entry.content_type.value
+        payload["content_type"] = entry.content_type
     if entry.fetched_at is not None:
         payload["fetched_at"] = entry.fetched_at.isoformat()
     return payload
@@ -137,8 +137,7 @@ def _serialize(entry: Entry) -> dict[str, Any]:
 
 def _deserialize(item: dict[str, Any]) -> Entry:
     """Reconstruct an ``Entry`` from the JSON shape produced by ``_serialize``."""
-    content_type_raw = item.get("content_type")
-    content_type = ContentType(content_type_raw) if content_type_raw is not None else None
+    content_type = item.get("content_type")
     fetched_at_raw = item.get("fetched_at")
     fetched_at = datetime.fromisoformat(fetched_at_raw) if fetched_at_raw is not None else None
     return Entry(

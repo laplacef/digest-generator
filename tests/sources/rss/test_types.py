@@ -1,11 +1,10 @@
 """Tests for digest_generator/sources/rss/types.py: RSS-specific enums and the Feed dataclass.
 
-Cross-stage types (`Entry`, `Summary`, `ContentType`, `Filter`, `Label`,
-`TopicType`) live in `digest_generator.core.types`; their tests are at
+Cross-stage types (`Entry`, `Summary`, `Filter`, `Label`, `TopicType`)
+live in `digest_generator.core.types`; their tests are at
 `tests/core/test_types.py`.
 """
 
-from digest_generator.core.types import ContentType
 from digest_generator.sources.rss.types import (
     BoilerplateMarker,
     Feed,
@@ -46,21 +45,21 @@ class TestFeed:
         feed = Feed(
             name="openai-blog",
             url="https://openai.com/blog/rss",
-            content_type=ContentType.AI,
+            content_type="ai",
         )
         assert feed.name == "openai-blog"
         assert feed.url == "https://openai.com/blog/rss"
-        assert feed.content_type == ContentType.AI
+        assert feed.content_type == "ai"
 
     def test_equality(self):
         feed_a = Feed(
             name="test",
             url="https://example.com/rss",
-            content_type=ContentType.ENGINEERING,
+            content_type="engineering",
         )
         feed_b = Feed(
             name="test",
             url="https://example.com/rss",
-            content_type=ContentType.ENGINEERING,
+            content_type="engineering",
         )
         assert feed_a == feed_b

@@ -1,6 +1,6 @@
 """Map-phase section drafting for the weekly digest pipeline.
 
-``SectionWriter`` generates one ``SectionDraft`` per ``ContentType`` bucket
+``SectionWriter`` generates one ``SectionDraft`` per category bucket
 via one LLM call (or per-batch + merge for large buckets). It produces no
 digest assembly, title, or framing; those are separate downstream stages.
 
@@ -14,9 +14,9 @@ from typing import Any
 
 from ollama import Client
 
+from digest_generator.core.categories import CategorySet, category_registry
 from digest_generator.core.digest.prompts import load_prompt
 from digest_generator.core.digest.types import Cluster, SectionDraft
-from digest_generator.core.types import ContentType
 from digest_generator.shared.llm.clients import client_registry
 from digest_generator.shared.llm.sampling import SamplingConfig, resolve_ollama_options
 from digest_generator.shared.llm.telemetry import chat_with_logging
@@ -31,7 +31,7 @@ class SectionWriter:
     """Generates per-section prose drafts from labeled article summaries.
 
     Connects to an Ollama instance (local or cloud) via the native ``ollama``
-    client. For each ``ContentType`` bucket, makes one LLM call to produce a
+    client. For each category bucket, makes one LLM call to produce a
     ``SectionDraft``. Large buckets are split into batches that are drafted
     per-batch then merged in one additional LLM call.
 
@@ -42,6 +42,8 @@ class SectionWriter:
         sampling: Per-call sampling overrides (``temperature``, ``top_p``,
                 ``repetition_penalty``, ``seed``). Unset fields fall back to
                 the matching ``writer_*`` settings.
+        categories: Section set (order + titles). Defaults to the configured
+                category set from ``category_registry``.
     """
 
     def __init__(
@@ -49,10 +51,12 @@ class SectionWriter:
         client: Client | None = None,
         model: str | None = None,
         sampling: SamplingConfig | None = None,
+        categories: CategorySet | None = None,
     ):
         self._client = client or client_registry.ollama
         self.model = model or settings.writer_model
         self._sampling = sampling
+        self._categories = categories or category_registry.active
 
     def write_all_from_json(
         self,
@@ -64,7 +68,7 @@ class SectionWriter:
         """Generate section drafts from dict-based JSON input.
 
         Accepts pre-loaded article dicts (e.g. read from ``summaries/*.json``)
-        and produces one ``SectionDraft`` per non-empty ``ContentType`` bucket.
+        and produces one ``SectionDraft`` per non-empty category bucket.
 
         When ``clusters`` is supplied (produced by ``ArticleClusterer``),
         article-to-section routing follows ``cluster.primary_section``
@@ -88,16 +92,16 @@ class SectionWriter:
 
     def _draft_sections(
         self,
-        grouped: dict[ContentType, list[dict[str, Any]]],
-        cross_refs: dict[ContentType, list[Cluster]],
+        grouped: dict[str, list[dict[str, Any]]],
+        cross_refs: dict[str, list[Cluster]],
         *,
         date_range: tuple[str, str] | None = None,
     ) -> list[SectionDraft]:
-        """Map phase: one ``SectionDraft`` per content type in enum order."""
+        """Map phase: one ``SectionDraft`` per category in section order."""
         drafts: list[SectionDraft] = []
-        for ct in ContentType:
-            articles = grouped.get(ct, [])
-            section_cross_refs = cross_refs.get(ct, [])
+        for category in self._categories:
+            articles = grouped.get(category.id, [])
+            section_cross_refs = cross_refs.get(category.id, [])
             if not articles and not section_cross_refs:
                 continue
             if not articles:
@@ -107,11 +111,11 @@ class SectionWriter:
                 # without that anchor the secondary references would float.
                 logger.debug(
                     "Skipping {} section — {} cross-refs but no primary articles",
-                    ct.display_name,
+                    category.title,
                     len(section_cross_refs),
                 )
                 continue
-            display_name = ct.display_name
+            display_name = category.title
             logger.info(
                 "Generating {} section ({} articles, {} cross-refs) via {}",
                 display_name,
@@ -302,18 +306,18 @@ class SectionWriter:
         lines.append("</articles>")
         return lines
 
-    @staticmethod
     def _group_by_clusters(
+        self,
         results: dict[str, list[dict[str, Any]]],
         clusters: list[Cluster] | None,
-    ) -> dict[ContentType, list[dict[str, Any]]]:
+    ) -> dict[str, list[dict[str, Any]]]:
         """Group articles by ``cluster.primary_section`` (fallback to ``content_type``).
 
         Builds a map from ``url`` to ``primary_section`` from ``clusters`` and routes
         each article by URL lookup. Articles whose URL isn't in the map
         (cluster-less callers, or clusters with empty ``primary_section``)
-        fall back to their ``content_type``. Articles with no valid
-        section by either path are dropped.
+        fall back to their ``content_type``. Articles whose section isn't a
+        known category by either path are dropped.
 
         ``cluster.primary_section`` always overrides ``content_type``: the
         LLM clusterer has full routing authority, including for
@@ -328,44 +332,38 @@ class SectionWriter:
                 for url in cluster.article_urls:
                     url_to_primary[url] = cluster.primary_section
 
-        grouped: dict[ContentType, list[dict[str, Any]]] = {}
+        grouped: dict[str, list[dict[str, Any]]] = {}
         for articles in results.values():
             for article in articles:
                 url = article.get("url", "")
-                raw_ct = url_to_primary.get(url) or article.get("content_type", "")
-                try:
-                    ct = ContentType(raw_ct)
-                except ValueError:
+                section = url_to_primary.get(url) or article.get("content_type", "")
+                if section not in self._categories:
                     continue
-                grouped.setdefault(ct, []).append(article)
+                grouped.setdefault(section, []).append(article)
         return grouped
 
-    @staticmethod
-    def _build_cross_refs(clusters: list[Cluster]) -> dict[ContentType, list[Cluster]]:
+    def _build_cross_refs(self, clusters: list[Cluster]) -> dict[str, list[Cluster]]:
         """Map each section to the clusters that touch it as a secondary."""
-        refs: dict[ContentType, list[Cluster]] = {}
+        refs: dict[str, list[Cluster]] = {}
         for cluster in clusters:
-            for sec in cluster.secondary_sections:
-                try:
-                    ct = ContentType(sec)
-                except ValueError:
+            for section in cluster.secondary_sections:
+                if section not in self._categories:
                     continue
-                refs.setdefault(ct, []).append(cluster)
+                refs.setdefault(section, []).append(cluster)
         return refs
 
-    @staticmethod
-    def _format_cross_refs(cross_refs: list[Cluster]) -> list[str]:
+    def _format_cross_refs(self, cross_refs: list[Cluster]) -> list[str]:
         """Render the ``<covered-elsewhere>`` block for the section's user prompt.
 
         One ``<cluster>`` element per cross-reference with ``lede``,
-        ``entities``, and ``urls`` sub-elements. ``primary`` attribute
-        is the ContentType display name (e.g. ``"AI & Machine Learning"``,
-        not ``"ai"``) so the writer can reference the section by its
-        rendered name when citing the cross-reference.
+        ``entities``, and ``urls`` sub-elements. The ``primary`` attribute
+        is the section's title (e.g. ``"AI & Machine Learning"``, not
+        ``"ai"``) so the writer can reference the section by its rendered
+        name when citing the cross-reference.
         """
         lines = ["<covered-elsewhere>"]
         for cluster in cross_refs:
-            primary_display = _primary_display_name(cluster.primary_section)
+            primary_display = self._categories.title(cluster.primary_section)
             lines.append(f'  <cluster primary="{primary_display}">')
             lines.append(f"    <lede>{cluster.lede}</lede>")
             if cluster.entities:
@@ -375,15 +373,3 @@ class SectionWriter:
             lines.append("  </cluster>")
         lines.append("</covered-elsewhere>")
         return lines
-
-
-def _primary_display_name(primary_section: str) -> str:
-    """Render the cluster's ``primary_section`` as its ContentType display name.
-
-    Falls back to the raw string when the value doesn't resolve (defensive;
-    the validator already ensures ``primary_section`` is a valid ContentType).
-    """
-    try:
-        return ContentType(primary_section).display_name
-    except ValueError:
-        return primary_section

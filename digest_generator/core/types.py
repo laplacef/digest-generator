@@ -5,9 +5,10 @@ its source: an ``Entry`` is whatever a fetcher produced, a ``Summary``
 is what the summarizer made of it, ``Label`` is a generic
 ``(value, confidence)`` shape produced by every label stage (currently
 ``TopicType`` via the topic classifier; ``SentimentType`` and
-``EntailmentType`` slot in as siblings when their stages exist),
-``Filter`` parameterizes the fetch contract, and ``ContentType`` is
-the section taxonomy the digest writer groups by.
+``EntailmentType`` slot in as siblings when their stages exist), and
+``Filter`` parameterizes the fetch contract. The digest section an entry
+belongs to is a category id string (``content_type``); the runtime set of
+categories lives in ``digest_generator.core.categories``.
 
 Source-specific configuration types (``Feed``, RSS selectors, etc.) live
 with their source in ``digest_generator.sources.rss.types``.
@@ -62,26 +63,6 @@ class TopicType(StrEnum):
     # Cryptocurrency
     CRYPTOCURRENCY = "cryptocurrency"
     BLOCKCHAIN = "blockchain"
-
-
-class ContentType(StrEnum):
-    """Section taxonomy for grouping articles in the weekly digest.
-
-    Enum order defines the section order in the digest output.
-    """
-
-    AI = "ai"
-    ENGINEERING = "engineering"
-    INFRASTRUCTURE = "infrastructure"
-    SECURITY = "security"
-    BUSINESS = "business"
-
-    @property
-    def display_name(self) -> str:
-        """Human-readable section heading for the weekly digest."""
-        if self is ContentType.AI:
-            return "AI & Machine Learning"
-        return self.name.capitalize()
 
 
 @dataclass
@@ -205,7 +186,7 @@ class Entry:
     content: str
     content_head: str = ""
     source_type: str = "rss"
-    content_type: ContentType | None = None
+    content_type: str | None = None
     fetched_at: datetime | None = None
 
 

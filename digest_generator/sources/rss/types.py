@@ -1,15 +1,14 @@
-"""RSS-specific type definitions: feed providers, content selectors, and feed config.
+"""RSS-specific type definitions: content selectors, boilerplate markers, feed config.
 
-Cross-stage types (``Entry``, ``Summary``, ``ContentType``, ``Label``,
-``TopicType``, ``Filter``) live in ``digest_generator.core.types``. Genuine
-infrastructure types (``DeviceType``, ``ModelConfig``) live in
+Cross-stage types (``Entry``, ``Summary``, ``Label``, ``TopicType``,
+``Filter``) live in ``digest_generator.core.types``. The runtime category
+set lives in ``digest_generator.core.categories``. Genuine infrastructure
+types (``DeviceType``, ``ModelConfig``) live in
 ``digest_generator.shared.transformers.types``.
 """
 
 from dataclasses import dataclass
 from enum import StrEnum
-
-from digest_generator.core.types import ContentType
 
 __all__ = [
     "BoilerplateMarker",
@@ -61,11 +60,12 @@ class Feed:
     """An RSS feed source: a stable name, a URL, and a content category.
 
     ``name`` is the stable identifier (used as the fetch cache filename and
-    as each entry's ``origin``). ``content_type`` places the feed's articles
-    in a digest section. Feeds are defined by the user in ``feeds.yaml`` and
-    materialized by ``digest_generator.sources.rss.config``.
+    as each entry's ``origin``). ``content_type`` is the category id placing
+    the feed's articles in a digest section; it is validated against the
+    ``categories:`` block when feeds load. Feeds are defined by the user in
+    ``feeds.yaml`` and materialized by ``digest_generator.sources.rss.config``.
     """
 
     name: str
     url: str
-    content_type: ContentType
+    content_type: str

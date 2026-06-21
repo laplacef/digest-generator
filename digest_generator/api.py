@@ -65,14 +65,16 @@ def resolve_feeds(
         FeedsConfigError: If no feeds file is found or it is invalid.
         ValueError: If a content type or feed name is invalid, or no feeds match.
     """
-    from digest_generator.core.types import ContentType
-    from digest_generator.sources.rss.config import load_configured_feeds
+    from digest_generator.sources.rss.config import (
+        load_configured_categories,
+        load_configured_feeds,
+    )
 
     all_feeds = load_configured_feeds(feeds_file=feeds_file, config_dir=config_dir)
     result = all_feeds
 
     if content_types:
-        valid = {ct.value for ct in ContentType}
+        valid = load_configured_categories(feeds_file=feeds_file, config_dir=config_dir).id_set()
         for ct in content_types:
             if ct not in valid:
                 msg = f"Unknown content type '{ct}'. Valid: {', '.join(sorted(valid))}"

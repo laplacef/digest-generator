@@ -2,7 +2,7 @@
 
 Holds device configuration and HuggingFace model configuration. The
 domain vocabulary (``Label``, ``TopicType``, ``Filter``, ``Entry``,
-``Summary``, ``ContentType``) lives in ``digest_generator.core.types``.
+``Summary``) lives in ``digest_generator.core.types``.
 """
 
 from dataclasses import dataclass, field

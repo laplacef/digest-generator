@@ -11,7 +11,7 @@ from digest_generator.core.summary.io import (
     save_summarized,
     summarized_path,
 )
-from digest_generator.core.types import ContentType, Entry, Summary
+from digest_generator.core.types import Entry, Summary
 
 
 @pytest.fixture
@@ -86,7 +86,7 @@ class TestSaveSummarized:
         save_summarized(
             tmp_path,
             "openai-news",
-            [_summary(now, content_type=ContentType.AI, fetched_at=now)],
+            [_summary(now, content_type="ai", fetched_at=now)],
         )
         article = json.loads(summarized_path(tmp_path, "openai-news").read_text())[0]
         assert article["content_type"] == "ai"

@@ -35,7 +35,7 @@ class SectionDraft:
     """A single per-section prose draft produced by ``SectionWriter``.
 
     Passed between pipeline stages (writer, then editor, then composer). ``name`` is
-    the section display name (matches a ``ContentType.display_name``).
+    the section display title (a category's ``title``).
     """
 
     name: str
@@ -65,7 +65,7 @@ class Cluster:
 
     A cluster groups articles describing the same story (often across
     multiple publishers) and records the editorial routing: which
-    ``ContentType`` section owns the full writeup (``primary_section``)
+    category section owns the full writeup (``primary_section``)
     and which sections should reference rather than expand it
     (``secondary_sections``). Members are URLs because URL is the
     cross-stage identifier already used to join ``source-summarized/``
@@ -80,11 +80,10 @@ class Cluster:
     amount) the writer can drop into a one-sentence cross-reference
     without re-extracting them from article content.
 
-    ``primary_section`` and ``secondary_sections`` carry ``ContentType``
-    values as strings (the project convention for enum-backed dataclass
-    fields, as in ``Label.value``). Size-1 clusters with no secondaries
-    are the no-op shape: equivalent to "no clustering applied to this
-    article."
+    ``primary_section`` and ``secondary_sections`` carry category ids as
+    strings, validated against the configured category set. Size-1 clusters
+    with no secondaries are the no-op shape: equivalent to "no clustering
+    applied to this article."
     """
 
     id: str

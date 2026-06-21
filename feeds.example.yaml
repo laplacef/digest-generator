@@ -6,15 +6,22 @@
 #   ~/.config/digest-generator/feeds.yaml # user-level
 #
 # Or point at it explicitly:  digest-generator run --feeds path/to/feeds.yaml
-#
+
+# Categories are the digest's sections, in order. Each has a stable id and a
+# display title. Feeds reference a category by its id. Define your own; the
+# ids below are only examples.
+categories:
+  - id: ai
+    title: "AI & Machine Learning"
+  - id: engineering
+    title: "Engineering"
+  - id: security
+    title: "Security"
+
 # Each feed needs three fields:
 #   name      stable id; becomes the fetch cache filename and each entry's origin
 #   url       the RSS/Atom feed URL
-#   category  the digest section the feed's articles belong to
-#
-# Valid categories: ai, engineering, infrastructure, security, business
-# (Section order in the digest follows the category order shown above.)
-
+#   category  one of the category ids defined above
 feeds:
   - name: openai-news
     url: https://openai.com/news/rss.xml

@@ -42,7 +42,7 @@ mkdir -p ~/.config/digest-generator
 cp feeds.example.yaml ~/.config/digest-generator/feeds.yaml
 ```
 
-Each feed needs a `name`, a `url`, and a `category` (one of `ai`, `engineering`, `infrastructure`, `security`, `business`). The loader searches, in order: a path passed via `--feeds`, then `<DIGEST_CONFIG>/feeds.yaml`, then `./digest-generator/feeds.yaml`, then `~/.config/digest-generator/feeds.yaml`. Point at any file directly with `digest-generator run --feeds path/to/feeds.yaml`.
+The file has two blocks. `categories:` defines your digest sections (each a stable `id` and a display `title`), in the order they appear in the digest. `feeds:` lists each feed's `name`, `url`, and `category` (which must match one of your category ids). The loader searches, in order: a path passed via `--feeds`, then `<DIGEST_CONFIG>/feeds.yaml`, then `./digest-generator/feeds.yaml`, then `~/.config/digest-generator/feeds.yaml`. Point at any file directly with `digest-generator run --feeds path/to/feeds.yaml`.
 
 ### 5. Verify the core install
 

@@ -850,7 +850,7 @@ def feeds(
     ] = None,
 ) -> None:
     """List the configured RSS feeds."""
-    from digest_generator.core.types import ContentType
+    from digest_generator.sources.rss.config import load_configured_categories
 
     try:
         from digest_generator.api import list_feeds
@@ -858,17 +858,18 @@ def feeds(
         filtered = list_feeds(
             content_types=content_type or None, feeds_file=feeds_file, config_dir=config_dir
         )
+        categories = load_configured_categories(feeds_file=feeds_file, config_dir=config_dir)
     except ValueError as e:
         typer.echo(f"Error: {e}")
         raise typer.Exit(1) from None
 
-    for ct in ContentType:
-        ct_feeds = [f for f in filtered if f.content_type == ct]
-        if not ct_feeds:
+    for category in categories:
+        cat_feeds = [f for f in filtered if f.content_type == category.id]
+        if not cat_feeds:
             continue
-        typer.echo(f"\n{ct.display_name} ({len(ct_feeds)})")
+        typer.echo(f"\n{category.title} ({len(cat_feeds)})")
         typer.echo("-" * 40)
-        for f in ct_feeds:
+        for f in cat_feeds:
             typer.echo(f"  {f.name:<35} {f.url}")
 
     typer.echo(f"\nTotal: {len(filtered)} feeds")

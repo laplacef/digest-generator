@@ -15,7 +15,6 @@ from digest_generator.core.digest.stages.writer import (
     SectionWriter,
 )
 from digest_generator.core.digest.types import Cluster, SectionDraft
-from digest_generator.core.types import ContentType
 
 
 @pytest.fixture
@@ -98,38 +97,38 @@ class TestRankArticles:
 
 
 class TestGroupResults:
-    def test_groups_by_content_type(self, sample_articles):
+    def test_groups_by_content_type(self, writer, sample_articles):
         results = {"feed1": sample_articles}
-        grouped = SectionWriter._group_by_clusters(results, None)
+        grouped = writer._group_by_clusters(results, None)
 
         assert len(grouped) == 3
-        assert len(grouped[ContentType.AI]) == 1
-        assert len(grouped[ContentType.SECURITY]) == 1
-        assert len(grouped[ContentType.ENGINEERING]) == 1
+        assert len(grouped["ai"]) == 1
+        assert len(grouped["security"]) == 1
+        assert len(grouped["engineering"]) == 1
 
-    def test_skips_invalid_content_type(self):
+    def test_skips_invalid_content_type(self, writer):
         results = {
             "feed1": [
                 {"title": "Valid", "content_type": "ai"},
                 {"title": "Invalid", "content_type": "nonexistent"},
             ]
         }
-        grouped = SectionWriter._group_by_clusters(results, None)
+        grouped = writer._group_by_clusters(results, None)
         assert len(grouped) == 1
-        assert ContentType.AI in grouped
+        assert "ai" in grouped
 
-    def test_skips_missing_content_type(self):
+    def test_skips_missing_content_type(self, writer):
         results = {"feed1": [{"title": "No CT"}]}
-        grouped = SectionWriter._group_by_clusters(results, None)
+        grouped = writer._group_by_clusters(results, None)
         assert len(grouped) == 0
 
-    def test_merges_across_feeds(self):
+    def test_merges_across_feeds(self, writer):
         results = {
             "feed1": [{"title": "A", "content_type": "ai"}],
             "feed2": [{"title": "B", "content_type": "ai"}],
         }
-        grouped = SectionWriter._group_by_clusters(results, None)
-        assert len(grouped[ContentType.AI]) == 2
+        grouped = writer._group_by_clusters(results, None)
+        assert len(grouped["ai"]) == 2
 
 
 # =============================================================================
@@ -461,7 +460,7 @@ class TestWriteAllFromJson:
 
 
 class TestClusterRouting:
-    def test_primary_section_overrides_content_type(self):
+    def test_primary_section_overrides_content_type(self, writer):
         """primary='business' wins over content_type='infrastructure'."""
 
         results = {
@@ -482,11 +481,11 @@ class TestClusterRouting:
                 secondary_sections=["infrastructure"],
             )
         ]
-        grouped = SectionWriter._group_by_clusters(results, clusters)
-        assert ContentType.BUSINESS in grouped
-        assert ContentType.INFRASTRUCTURE not in grouped
+        grouped = writer._group_by_clusters(results, clusters)
+        assert "business" in grouped
+        assert "infrastructure" not in grouped
 
-    def test_articles_without_cluster_fall_back_to_content_type(self):
+    def test_articles_without_cluster_fall_back_to_content_type(self, writer):
 
         results = {
             "feed": [
@@ -502,12 +501,12 @@ class TestClusterRouting:
                 primary_section="business",
             )
         ]
-        grouped = SectionWriter._group_by_clusters(results, clusters)
-        assert ContentType.BUSINESS in grouped
-        assert ContentType.SECURITY in grouped
-        assert ContentType.AI not in grouped
+        grouped = writer._group_by_clusters(results, clusters)
+        assert "business" in grouped
+        assert "security" in grouped
+        assert "ai" not in grouped
 
-    def test_cluster_with_empty_primary_falls_back_to_content_type(self):
+    def test_cluster_with_empty_primary_falls_back_to_content_type(self, writer):
 
         results = {"feed": [{"title": "T", "url": "https://u", "content_type": "ai"}]}
         clusters = [
@@ -518,10 +517,10 @@ class TestClusterRouting:
                 primary_section="",
             )
         ]
-        grouped = SectionWriter._group_by_clusters(results, clusters)
-        assert ContentType.AI in grouped
+        grouped = writer._group_by_clusters(results, clusters)
+        assert "ai" in grouped
 
-    def test_build_cross_refs_groups_by_secondary_section(self):
+    def test_build_cross_refs_groups_by_secondary_section(self, writer):
 
         clusters = [
             Cluster(
@@ -546,12 +545,12 @@ class TestClusterRouting:
                 secondary_sections=[],
             ),
         ]
-        refs = SectionWriter._build_cross_refs(clusters)
-        assert {c.id for c in refs[ContentType.INFRASTRUCTURE]} == {"c1"}
-        assert {c.id for c in refs[ContentType.AI]} == {"c1", "c2"}
-        assert ContentType.ENGINEERING not in refs
+        refs = writer._build_cross_refs(clusters)
+        assert {c.id for c in refs["infrastructure"]} == {"c1"}
+        assert {c.id for c in refs["ai"]} == {"c1", "c2"}
+        assert "engineering" not in refs
 
-    def test_format_cross_refs_renders_lede_entities_urls(self):
+    def test_format_cross_refs_renders_lede_entities_urls(self, writer):
 
         clusters = [
             Cluster(
@@ -563,14 +562,14 @@ class TestClusterRouting:
                 entities=["Cloudflare", "Stripe", "$100/mo cap"],
             )
         ]
-        block = "\n".join(SectionWriter._format_cross_refs(clusters))
+        block = "\n".join(writer._format_cross_refs(clusters))
         assert "<covered-elsewhere>" in block
         assert 'primary="Business"' in block
         assert "<lede>Cloudflare/Stripe agent protocol</lede>" in block
         assert "<entities>Cloudflare, Stripe, $100/mo cap</entities>" in block
         assert "<urls>https://blog.cloudflare.com/x, https://infoworld.com/y</urls>" in block
 
-    def test_format_cross_refs_omits_optional_fields_when_empty(self):
+    def test_format_cross_refs_omits_optional_fields_when_empty(self, writer):
 
         clusters = [
             Cluster(
@@ -582,7 +581,7 @@ class TestClusterRouting:
                 entities=[],
             )
         ]
-        block = "\n".join(SectionWriter._format_cross_refs(clusters))
+        block = "\n".join(writer._format_cross_refs(clusters))
         assert "<entities>" not in block
         assert "<urls>" not in block
         assert "<lede>some lede</lede>" in block

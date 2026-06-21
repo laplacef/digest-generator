@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from digest_generator.core.types import ContentType, Filter
+from digest_generator.core.types import Filter
 from digest_generator.sources.rss.fetcher import FeedFetcher, _truncate_at_word_boundary
 from digest_generator.sources.rss.types import Feed
 
@@ -31,7 +31,7 @@ def sample_feed():
     return Feed(
         name="test-feed",
         url="https://example.com/rss",
-        content_type=ContentType.AI,
+        content_type="ai",
     )
 
 

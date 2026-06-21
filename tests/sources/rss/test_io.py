@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from digest_generator.core.types import ContentType, Entry
+from digest_generator.core.types import Entry
 from digest_generator.sources.rss.io import (
     fetched_path,
     iter_fetched,
@@ -26,7 +26,7 @@ def _entry(
     url="https://example.com/1",
     content_head="head",
     source_type="rss",
-    content_type=ContentType.AI,
+    content_type="ai",
     fetched_at=None,
 ):
     return Entry(
@@ -108,7 +108,7 @@ class TestLoadEntries:
         entries = load_entries(tmp_path, "openai-news")
         assert entries is not None
         assert entries[0].source_type == "rss"
-        assert entries[0].content_type is ContentType.AI
+        assert entries[0].content_type == "ai"
         assert entries[0].fetched_at == now
 
     def test_raises_on_non_list_payload(self, tmp_path):
@@ -127,17 +127,17 @@ class TestIterFetched:
         save_entries(
             tmp_path,
             "feed-a",
-            [_entry(now, content_type=ContentType.AI)],
+            [_entry(now, content_type="ai")],
         )
         save_entries(
             tmp_path,
             "feed-b",
-            [_entry(now, content_type=ContentType.SECURITY)],
+            [_entry(now, content_type="security")],
         )
         results = list(iter_fetched(tmp_path))
         types = {ct for ct, _, _ in results}
         feeds = {feed for _, feed, _ in results}
-        assert types == {ContentType.AI, ContentType.SECURITY}
+        assert types == {"ai", "security"}
         assert feeds == {"feed-a", "feed-b"}
 
     def test_returns_entry_dataclasses(self, tmp_path, now):

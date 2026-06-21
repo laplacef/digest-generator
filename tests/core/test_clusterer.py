@@ -30,6 +30,9 @@ from digest_generator.core.digest.stages.clusterer import (
 )
 from digest_generator.core.digest.types import Cluster
 
+# Category ids the validation helpers accept; mirrors the conftest test set.
+_SECTIONS = frozenset({"ai", "engineering", "infrastructure", "security", "business"})
+
 
 def _mock_response(content: str) -> MagicMock:
     resp = MagicMock()
@@ -220,14 +223,14 @@ class TestValidator:
             {"id": "k1", "articles": ["a0001", "a0002"], "primary_section": "ai"},
             {"id": "k2", "articles": ["a0002", "a0003"], "primary_section": "business"},
         ]
-        clusters = _validate_and_normalize(raw, indexed)
+        clusters = _validate_and_normalize(raw, indexed, _SECTIONS)
         assert clusters[0].article_urls == ["u1", "u2"]
         # a0002 already taken, so cluster 2 only gets a0003
         assert clusters[1].article_urls == ["u3"]
 
     def test_backfills_missing_articles_as_size_one_clusters(self, indexed):
         raw = [{"id": "k1", "articles": ["a0001"], "primary_section": "ai"}]
-        clusters = _validate_and_normalize(raw, indexed)
+        clusters = _validate_and_normalize(raw, indexed, _SECTIONS)
         # 1 LLM cluster + 2 backfilled size-1 clusters
         assert len(clusters) == 3
         backfilled = [c for c in clusters if len(c.article_urls) == 1]
@@ -237,7 +240,7 @@ class TestValidator:
         # Articles without content_type cause the cluster to get dropped, then backfilled.
         no_ct = [("a0001", {"url": "u1", "title": "t1"})]
         raw = [{"id": "k1", "articles": ["a0001"], "primary_section": "not-real"}]
-        clusters = _validate_and_normalize(raw, no_ct)
+        clusters = _validate_and_normalize(raw, no_ct, _SECTIONS)
         # Cluster dropped; backfill creates size-1 with primary=""
         assert len(clusters) == 1
         assert clusters[0].primary_section == ""
@@ -251,28 +254,30 @@ class TestValidator:
                 "primary_section": "garbage",
             }
         ]
-        clusters = _validate_and_normalize(raw, indexed)
+        clusters = _validate_and_normalize(raw, indexed, _SECTIONS)
         # Two `ai` articles vs one `business`, so majority picks ai
         assert clusters[0].primary_section == "ai"
 
     def test_secondary_sections_validated_deduped_capped(self):
         primary = "ai"
         out = _coerce_secondary_sections(
-            ["security", "garbage", "security", "business", "engineering", "ai"], primary
+            ["security", "garbage", "security", "business", "engineering", "ai"],
+            primary,
+            _SECTIONS,
         )
         # garbage dropped, duplicate dropped, primary dropped, cap at 2
         assert out == ["security", "business"]
 
     def test_non_list_secondary_sections_returns_empty(self):
-        assert _coerce_secondary_sections("not-a-list", "ai") == []
-        assert _coerce_secondary_sections(None, "ai") == []
+        assert _coerce_secondary_sections("not-a-list", "ai", _SECTIONS) == []
+        assert _coerce_secondary_sections(None, "ai", _SECTIONS) == []
 
     def test_canonical_re_id_independent_of_llm_handles(self, indexed):
         raw = [
             {"id": "zzz", "articles": ["a0003"], "primary_section": "business"},
             {"id": "kaboom", "articles": ["a0001"], "primary_section": "ai"},
         ]
-        clusters = _validate_and_normalize(raw, indexed)
+        clusters = _validate_and_normalize(raw, indexed, _SECTIONS)
         ids = [c.id for c in clusters]
         # First two are LLM clusters re-numbered; the third is backfilled (a0002).
         assert ids[0] == "c0001"
@@ -286,20 +291,20 @@ class TestMajorityContentType:
             {"content_type": "ai"},
             {"content_type": "business"},
         ]
-        assert _majority_content_type(articles) == "ai"
+        assert _majority_content_type(articles, _SECTIONS) == "ai"
 
     def test_first_seen_wins_on_tie(self):
         articles = [{"content_type": "ai"}, {"content_type": "business"}]
         # Both count once, so max() is stable, first-seen wins
-        assert _majority_content_type(articles) == "ai"
+        assert _majority_content_type(articles, _SECTIONS) == "ai"
 
     def test_invalid_content_types_ignored(self):
         articles = [{"content_type": "garbage"}, {"content_type": "ai"}]
-        assert _majority_content_type(articles) == "ai"
+        assert _majority_content_type(articles, _SECTIONS) == "ai"
 
     def test_no_valid_content_type_returns_empty(self):
-        assert _majority_content_type([{"content_type": "garbage"}]) == ""
-        assert _majority_content_type([{}]) == ""
+        assert _majority_content_type([{"content_type": "garbage"}], _SECTIONS) == ""
+        assert _majority_content_type([{}], _SECTIONS) == ""
 
 
 # =============================================================================
@@ -339,7 +344,7 @@ class TestTrivialFallback:
             ("a0001", {"url": "u1", "title": "t1", "content_type": "ai"}),
             ("a0002", {"url": "u2", "title": "t2", "content_type": "business"}),
         ]
-        clusters = _trivial_fallback(indexed)
+        clusters = _trivial_fallback(indexed, _SECTIONS)
         assert len(clusters) == 2
         assert clusters[0].id == "c0001"
         assert clusters[1].id == "c0002"
@@ -349,12 +354,12 @@ class TestTrivialFallback:
 
     def test_invalid_content_type_yields_empty_primary(self):
         indexed = [("a0001", {"url": "u", "title": "t", "content_type": "not-real"})]
-        clusters = _trivial_fallback(indexed)
+        clusters = _trivial_fallback(indexed, _SECTIONS)
         assert clusters[0].primary_section == ""
 
     def test_missing_url_yields_empty_url_list(self):
         indexed = [("a0001", {"title": "t", "content_type": "ai"})]
-        clusters = _trivial_fallback(indexed)
+        clusters = _trivial_fallback(indexed, _SECTIONS)
         assert clusters[0].article_urls == []
 
 

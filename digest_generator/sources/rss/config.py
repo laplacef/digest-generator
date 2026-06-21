@@ -1,8 +1,10 @@
 """RSS feed configuration: discovery and loading from ``feeds.yaml``.
 
-Feeds are not hardcoded in the package. The user supplies a ``feeds.yaml``
-(see ``feeds.example.yaml`` for the schema), which this module discovers
-across a fixed search path and validates into a ``list[Feed]``.
+Feeds and categories are not hardcoded in the package. The user supplies a
+``feeds.yaml`` (see ``feeds.example.yaml`` for the schema) with a
+``categories:`` block (the digest sections, in order) and a ``feeds:`` block.
+This module discovers that file across a fixed search path and validates it
+into a ``CategorySet`` plus a ``list[Feed]``.
 
 Search order (first existing file wins):
 
@@ -20,7 +22,7 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from digest_generator.core.types import ContentType
+from digest_generator.core.categories import Category, CategorySet
 from digest_generator.shared.settings import settings
 from digest_generator.sources.rss.types import Feed
 
@@ -33,6 +35,15 @@ class FeedsConfigError(ValueError):
     """Raised when the feeds configuration is missing or invalid."""
 
 
+class _CategoryEntry(BaseModel):
+    """One category row in the ``categories:`` block of ``feeds.yaml``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+
+
 class _FeedEntry(BaseModel):
     """One feed row in ``feeds.yaml``."""
 
@@ -40,18 +51,19 @@ class _FeedEntry(BaseModel):
 
     name: str = Field(min_length=1)
     url: str = Field(min_length=1)
-    category: ContentType
+    category: str = Field(min_length=1)
 
 
 class _FeedsDoc(BaseModel):
-    """Top-level ``feeds.yaml`` document.
+    """Top-level ``feeds.yaml`` document: categories plus feeds.
 
     Unknown top-level keys are ignored so a config carrying forward-looking
-    sections (e.g. a future ``categories:`` block) still loads.
+    sections still loads.
     """
 
     model_config = ConfigDict(extra="ignore")
 
+    categories: list[_CategoryEntry] = Field(min_length=1)
     feeds: list[_FeedEntry] = Field(min_length=1)
 
 
@@ -85,18 +97,23 @@ def discover_feeds_file(
     return None
 
 
-def load_feeds(path: Path) -> list[Feed]:
-    """Parse and validate a ``feeds.yaml`` file into a list of ``Feed``.
+def load_config(path: Path) -> tuple[CategorySet, list[Feed]]:
+    """Parse and validate a ``feeds.yaml`` file into categories and feeds.
+
+    Categories and feeds are interdependent (every feed's ``category`` must
+    name a defined category), so they load together.
 
     Args:
         path: Path to a ``feeds.yaml`` file.
 
     Returns:
-        The feeds declared in the file, in document order.
+        The ``CategorySet`` (in section order) and the feeds (in document
+        order).
 
     Raises:
         FeedsConfigError: If the file is unreadable, empty, malformed,
-            declares an unknown category, or repeats a feed name.
+            repeats a category id or feed name, or a feed names an unknown
+            category.
     """
     try:
         raw = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -114,22 +131,71 @@ def load_feeds(path: Path) -> list[Feed]:
     try:
         doc = _FeedsDoc.model_validate(raw)
     except ValidationError as exc:
-        valid = ", ".join(ct.value for ct in ContentType)
         msg = (
             f"Invalid feeds config at {path}:\n{exc}\n"
-            f"Each feed needs name, url, and a category (one of: {valid})."
+            "Needs a categories list (id + title) and a feeds list "
+            "(name, url, category)."
         )
         raise FeedsConfigError(msg) from exc
 
-    names = [entry.name for entry in doc.feeds]
-    duplicates = sorted({name for name in names if names.count(name) > 1})
-    if duplicates:
-        msg = f"Duplicate feed name(s) in {path}: {', '.join(duplicates)}"
+    category_ids = [entry.id for entry in doc.categories]
+    duplicate_categories = sorted({cid for cid in category_ids if category_ids.count(cid) > 1})
+    if duplicate_categories:
+        msg = f"Duplicate category id(s) in {path}: {', '.join(duplicate_categories)}"
         raise FeedsConfigError(msg)
 
-    return [
+    names = [entry.name for entry in doc.feeds]
+    duplicate_names = sorted({name for name in names if names.count(name) > 1})
+    if duplicate_names:
+        msg = f"Duplicate feed name(s) in {path}: {', '.join(duplicate_names)}"
+        raise FeedsConfigError(msg)
+
+    known = set(category_ids)
+    unknown = sorted({entry.category for entry in doc.feeds if entry.category not in known})
+    if unknown:
+        valid = ", ".join(category_ids)
+        msg = (
+            f"Feed(s) in {path} name unknown categor(ies): {', '.join(unknown)}. "
+            f"Defined categories: {valid}."
+        )
+        raise FeedsConfigError(msg)
+
+    categories = CategorySet([Category(id=entry.id, title=entry.title) for entry in doc.categories])
+    feeds = [
         Feed(name=entry.name, url=entry.url, content_type=entry.category) for entry in doc.feeds
     ]
+    return categories, feeds
+
+
+def load_feeds(path: Path) -> list[Feed]:
+    """Load just the feeds from a ``feeds.yaml`` file. See ``load_config``."""
+    return load_config(path)[1]
+
+
+def load_categories(path: Path) -> CategorySet:
+    """Load just the categories from a ``feeds.yaml`` file. See ``load_config``."""
+    return load_config(path)[0]
+
+
+def _resolve_config_path(
+    feeds_file: str | Path | None,
+    config_dir: str | Path | None,
+) -> Path:
+    """Discover the active feeds.yaml or raise an actionable not-found error."""
+    feeds_file = feeds_file or settings.feeds_file or None
+    config_dir = config_dir or settings.digest_config or None
+
+    path = discover_feeds_file(feeds_file, config_dir)
+    if path is None:
+        searched = "\n  ".join(str(p) for p in candidate_paths(feeds_file, config_dir))
+        msg = (
+            "No feeds.yaml found. Searched:\n  "
+            f"{searched}\n"
+            "Copy feeds.example.yaml to one of these locations (or pass "
+            "--feeds / --config) and add your feeds."
+        )
+        raise FeedsConfigError(msg)
+    return path
 
 
 def load_configured_feeds(
@@ -145,17 +211,12 @@ def load_configured_feeds(
         FeedsConfigError: If no feeds file is found, or the resolved file
             is invalid.
     """
-    feeds_file = feeds_file or settings.feeds_file or None
-    config_dir = config_dir or settings.digest_config or None
+    return load_feeds(_resolve_config_path(feeds_file, config_dir))
 
-    path = discover_feeds_file(feeds_file, config_dir)
-    if path is None:
-        searched = "\n  ".join(str(p) for p in candidate_paths(feeds_file, config_dir))
-        msg = (
-            "No feeds.yaml found. Searched:\n  "
-            f"{searched}\n"
-            "Copy feeds.example.yaml to one of these locations (or pass "
-            "--feeds / --config) and add your feeds."
-        )
-        raise FeedsConfigError(msg)
-    return load_feeds(path)
+
+def load_configured_categories(
+    feeds_file: str | Path | None = None,
+    config_dir: str | Path | None = None,
+) -> CategorySet:
+    """Discover and load the active category set. See ``load_configured_feeds``."""
+    return load_categories(_resolve_config_path(feeds_file, config_dir))

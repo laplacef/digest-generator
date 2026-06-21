@@ -33,8 +33,8 @@ class DigestComposer:
 
         The returned ``DigestResult.content`` starts with a ``## Overview``
         heading and the lede paragraph, then each section draft in the
-        provided order (the outer pipeline supplies them in ``ContentType``
-        enum order), then the ``## What to Watch`` H2 section. The title is
+        provided order (the outer pipeline supplies them in category
+        section order), then the ``## What to Watch`` H2 section. The title is
         carried in ``DigestResult.title`` and rendered into the YAML
         frontmatter by ``io.build_digest_markdown``. The title is never
         emitted as an H1 in the body, since every consumer renders it from
