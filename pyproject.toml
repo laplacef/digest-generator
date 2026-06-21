@@ -12,7 +12,30 @@ description = "Generates weekly digests from RSS feeds using local LLMs and topi
 readme = "README.md"
 requires-python = ">=3.13"
 license = "Apache-2.0"
+license-files = ["LICENSE.md", "NOTICE.md"]
 authors = [{ name = "Francisco Laplace", url = "https://laplacef.me" }]
+keywords = [
+    "rss",
+    "digest",
+    "newsletter",
+    "summarization",
+    "llm",
+    "ollama",
+    "nlp",
+    "transformers",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Internet",
+    "Topic :: Text Processing :: Markup :: Markdown",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
 dependencies = [
     "beautifulsoup4>=4.14.3",
     "cloudscraper>=1.2.71",
@@ -27,6 +50,12 @@ dependencies = [
     "transformers>=5.1.0",
     "typer>=0.15.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/laplacef/digest-generator"
+Repository = "https://github.com/laplacef/digest-generator"
+Issues = "https://github.com/laplacef/digest-generator/issues"
+Changelog = "https://github.com/laplacef/digest-generator/blob/main/CHANGELOG.md"
 
 [project.scripts]
 digest-generator = "digest_generator.cli:app"
