@@ -1,0 +1,210 @@
+# Pronunciation overrides for the audio narration pre-pass.
+#
+# Maps a token (matched as a whole word, case-sensitive) to its
+# speech-friendly form. Applied by narration.markdown_to_narration
+# after the markdown AST walk, before Piper synthesis.
+#
+# Add entries here when listening to a real digest reveals Piper
+# mispronouncing a token. Iterate based on output, not speculation,
+# but a baseline of common tech acronyms is seeded here from a
+# 14-digest audit (2026-05-13).
+#
+# Treatment choices (per-entry):
+# - Letters separated by single spaces ("A W S") maps to Piper pronounces
+#   each letter individually. Use for initialisms (AWS, CVE, API).
+# - Lowercase word or phonetic spelling ("sisa", "engine-ex") maps to
+#   Piper pronounces it as a word. Use for acronyms-as-words.
+# - Full English expansion ("multi-factor authentication") maps to Use
+#   sparingly, only for jargon-y acronyms that would be unclear
+#   to listeners not deep in the field.
+#
+# Notes:
+# - Matcher is whole-word and case-sensitive ("AGI" and "agi" can
+#   differ; "MW" in "800 MW" matches but "MW" in "100MW" doesn't,
+#   the preceding digit is a word char).
+# - Cache key does NOT see edits to this file. After changing an
+#   override, force a re-render with `rm -rf <run>/audio` before
+#   `digest-generator audio <run>`.
+# - Tokens with embedded digits (2FA, EC2, APT41) can't be reliably
+#   matched by the current regex; revisit if listening flags them.
+
+# =============================================================================
+# Pronounced as words (Piper would likely letter-spell or garble; force word form)
+# =============================================================================
+
+BERT: bert
+CIBA: see-ba
+CISA: sisa
+CUDA: koo-duh
+DDoS: dee-doss
+JSON: jay-son
+KEM: kem
+KICS: kicks
+LDAP: L-dap
+NGINX: engine-ex
+NIST: nist
+OPSEC: op-sek
+OWASP: oh-wasp
+RAG: rag
+RAM: ram
+SAML: sam-ull
+SANS: sans
+SASE: sass-ee
+SIEM: seem
+SOHO: so-ho
+
+# IaaS/PaaS/SaaS: mixed-case acronyms commonly said as words.
+IaaS: eye-ass
+PaaS: paas
+SaaS: sass
+
+# =============================================================================
+# Letter-by-letter initialisms (force Piper to spell each letter)
+# =============================================================================
+
+# AI is intentionally not overridden: Piper handles "AI" cleanly and
+# the token appears 600+ times per digest; forcing "A I" would feel
+# choppy across the whole narration.
+
+AGI: A G I
+# API/APIs use hyphenated phonetic respelling: letter-spaced "A P I"
+# rendered as "ay pee eye" with stress on each letter; hyphenation
+# tightens the gap and reads more naturally given API's ~per-paragraph
+# frequency in digest prose.
+API: ay-pee-aye
+APIs: ay-pee-ayes
+APT: A P T
+ARR: A R R
+AWS: A W S
+CD: C D
+CDN: C D N
+CEO: C E O
+CI: C I
+CLI: C L I
+COO: C O O
+CPU: C P U
+CSA: C S A
+CSAI: C S A I
+CSS: C S S
+CTO: C T O
+CVE: C V E
+CVSS: C V S S
+DLSS: D L S S
+DMS: D M S
+DNS: D N S
+DSQL: D-sequel
+EBS: E B S
+EKS: E K S
+ETL: E T L
+FBI: F B I
+FCC: F C C
+FTP: F T P
+GPT: G P T
+GPTs: G P Ts
+GPU: G P U
+GPUs: G P Us
+GTC: G T C
+HDD: H D D
+HTML: H T M L
+HTTP: H T T P
+HTTPS: H T T P S
+IAM: I A M
+IBM: I B M
+IDA: I D A
+IDE: I D E
+IMAP: I M A P
+IP: I P
+IPO: I P O
+ISO: I S O
+IT: I T
+JWT: J W T
+KMS: K M S
+KPMG: K P M G
+LLM: L L M
+LLMs: L L Ms
+LTE: L T E
+MCP: M C P
+MFA: M F A
+ML: M L
+MTU: M T U
+NHS: N H S
+NLI: N L I
+NLP: N L P
+NSA: N S A
+NXP: N X P
+OAuth: O-auth
+OCR: O C R
+OIDC: O I D C
+OS: O S
+OT: O T
+PR: P R
+QA: Q A
+QR: Q R
+RCE: R C E
+RDS: R D S
+ROI: R O I
+RSAC: R S A C
+RSS: R S S
+RTX: R T X
+SD: S D
+SDK: S D K
+SMTP: S M T P
+SSCF: S S C F
+SSD: S S D
+SSH: S S H
+SSL: S S L
+TCP: T C P
+TLS: T L S
+TTS: T T S
+UDP: U D P
+URI: U R I
+URL: U R L
+UUID: U U I D
+VC: V C
+VCs: V Cs
+VPC: V P C
+VPN: V P N
+YC: Y C
+
+# =============================================================================
+# Acronyms expanded to full meaning (jargon that's unclear letter-spelled)
+# =============================================================================
+
+BYOVD: bring your own vulnerable driver
+FGA: fine-grained authorization
+KEV: known exploited vulnerabilities
+PQC: post-quantum cryptography
+SWE: software engineer
+
+# =============================================================================
+# Mixed-pronunciation acronyms (industry convention: word form)
+# =============================================================================
+
+# SQL maps to "sequel" is the more natural spoken form. Both are common;
+# pick one and stick to it for consistency.
+SQL: sequel
+# WAN maps to "wan" (rhymes with "ran") in networking parlance.
+WAN: wan
+
+# =============================================================================
+# Brand names + product names with non-obvious pronunciation
+# =============================================================================
+
+# Company name pronounced "en-vidia" (the V is rendered as in "envy"
+# + "idia"); without this override Piper would over-stress NVI as a
+# single syllable.
+NVIDIA: en-vidia
+# Mid-size SAP is the company, pronounced "S A P" (letters) in
+# English speech, even though Germans say "zap".
+SAP: S A P
+# IBM, AMD intentionally letter-spelled (covered above) since that's
+# the industry-standard spoken form.
+
+# =============================================================================
+# Units
+# =============================================================================
+# Numeric+unit pairs (both "800 MW" and "10GW" forms) are handled by the
+# `_UNIT_RE` pre-walk normalizer in narration.py, adding entries here is
+# redundant for the patterns it covers (GW/MW/GB/MB/KB/TB/Tbps/Gbps/Mbps/Kbps).
+# Add unit overrides here only if a unit is voiced without a leading number
+# (where the regex wouldn't fire) or for units not yet in `_UNIT_EXPANSIONS`.

@@ -1,0 +1,23 @@
+# gitleaks configuration.
+#
+# `useDefault` keeps every built-in rule active; the allowlist below only
+# suppresses known false positives so the scanner stays strict everywhere else.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Repo-specific false-positive allowlist"
+
+# detect-secrets stores accepted findings as SHA1 hashes; gitleaks would
+# otherwise flag those hashes as generic high-entropy secrets.
+paths = [
+  '''\.secrets\.baseline''',
+]
+
+# Pinned, public model/voice revision identifiers (40-char git SHAs), not
+# secrets: the HuggingFace topic-model revision and the Piper voice-repo
+# revision. Update these if the pins in settings.py / .env.example change.
+regexes = [
+  '''d7645e127eaf1aefc7862fd59a17a5aa8558b8ce''',
+  '''375a0fe641dea077c2a47b4e9a056d6da521eed3''',
+]

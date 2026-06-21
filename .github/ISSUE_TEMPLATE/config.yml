@@ -1,0 +1,6 @@
+# Require contributors to use a template instead of opening a blank issue.
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/laplacef/digest-generator/security/advisories/new
+    about: Report security issues privately. Do not open a public issue.

@@ -1,0 +1,196 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["digest_generator"]
+
+[project]
+name = "digest-generator"
+version = "0.1.0"
+description = "Generates weekly digests from RSS feeds using local LLMs and topic classification."
+readme = "README.md"
+requires-python = ">=3.13"
+license = "Apache-2.0"
+authors = [{ name = "Francisco Laplace", url = "https://laplacef.me" }]
+dependencies = [
+    "beautifulsoup4>=4.14.3",
+    "cloudscraper>=1.2.71",
+    "feedparser>=6.0.12",
+    "loguru>=0.7.3",
+    "markdown-it-py>=4.0.0",
+    "ollama>=0.6.1",
+    "pydantic-settings>=2.9.1",
+    "python-dotenv>=1.2.2",
+    "pyyaml>=6.0.0",
+    "torch>=2.10.0",
+    "transformers>=5.1.0",
+    "typer>=0.15.0",
+]
+
+[project.scripts]
+digest-generator = "digest_generator.cli:app"
+
+[project.optional-dependencies]
+dev = [
+    "pre-commit>=4.0.1",
+    "ruff>=0.8.6",
+    "mypy>=1.14.1",
+    "bandit[toml]>=1.8.0",
+    "pytest>=9.0.3",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+]
+
+# ============================================================================
+# Tool Configurations
+# ============================================================================
+
+# PyTorch - CUDA 13.0 Support
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+[tool.uv.sources]
+torch = [
+  { index = "pytorch-cu130", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+]
+
+# Ruff - Linting and Formatting
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+
+# Enable recommended rules
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort
+    "N",      # pep8-naming
+    "UP",     # pyupgrade
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "DTZ",    # flake8-datetimez
+    "T10",    # flake8-debugger
+    "EM",     # flake8-errmsg
+    "ICN",    # flake8-import-conventions
+    "PIE",    # flake8-pie
+    "PT",     # flake8-pytest-style
+    "Q",      # flake8-quotes
+    "SIM",    # flake8-simplify
+    "ARG",    # flake8-unused-arguments
+    "PTH",    # flake8-use-pathlib
+    "PL",     # pylint
+    "RUF",    # Ruff-specific rules
+]
+
+# Ignore specific rules
+ignore = [
+    "E501",   # Line too long (handled by formatter)
+    "PLR0913", # Too many arguments
+    "PLR2004", # Magic value comparison
+]
+
+# Allow fix for all enabled rules
+fixable = ["ALL"]
+unfixable = []
+
+# Exclude common directories
+exclude = [
+    ".git",
+    ".venv",
+    "venv",
+    "__pycache__",
+    "build",
+    "dist",
+    ".eggs",
+]
+
+# Ruff - Per-file ignores
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]  # Unused imports in __init__.py
+"digest_generator/api.py" = ["PLC0415"]  # Lazy imports to avoid loading torch/transformers at import time
+"digest_generator/cli.py" = ["PLC0415"]  # Lazy imports for fast --help
+"digest_generator/core/digest/orchestrator.py" = ["PLC0415"]  # Lazy imports to keep stage modules out of the API import chain
+"tests/**/*.py" = ["ARG002"]  # Unused mock arguments from @patch decorators
+
+# Ruff - Formatting
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+
+# MyPy - Type Checking
+[tool.mypy]
+python_version = "3.13"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+check_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+strict_optional = true
+
+# Ignore missing imports for third-party libraries
+[[tool.mypy.overrides]]
+module = [
+    "feedparser.*",
+    "cloudscraper.*",
+    "transformers.*",
+    "torch.*",
+    "typer.*",
+    "yaml",
+    "yaml.*",
+]
+ignore_missing_imports = true
+
+# Bandit - Security Scanning
+[tool.bandit]
+exclude_dirs = [
+    ".venv",
+    "venv",
+    "tests",
+    ".git",
+]
+skips = [
+    "B101",  # assert_used - we use assertions in tests
+]
+
+# Pytest - Testing Configuration
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+asyncio_mode = "strict"
+addopts = [
+    "--verbose",
+    "--cov=digest_generator",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+]
+
+# Coverage - Code Coverage
+[tool.coverage.run]
+source = ["digest_generator"]
+omit = [
+    "*/tests/*",
+    "*/__pycache__/*",
+    ".venv/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]

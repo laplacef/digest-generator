@@ -1,0 +1,37 @@
+# Example feeds configuration for digest-generator.
+#
+# Copy this file to one of the locations the loader searches, then edit it:
+#
+#   ./digest-generator/feeds.yaml        # project-local
+#   ~/.config/digest-generator/feeds.yaml # user-level
+#
+# Or point at it explicitly:  digest-generator run --feeds path/to/feeds.yaml
+#
+# Each feed needs three fields:
+#   name      stable id; becomes the fetch cache filename and each entry's origin
+#   url       the RSS/Atom feed URL
+#   category  the digest section the feed's articles belong to
+#
+# Valid categories: ai, engineering, infrastructure, security, business
+# (Section order in the digest follows the category order shown above.)
+
+feeds:
+  - name: openai-news
+    url: https://openai.com/news/rss.xml
+    category: ai
+
+  - name: huggingface-blog
+    url: https://huggingface.co/blog/feed.xml
+    category: ai
+
+  - name: github-blog
+    url: https://github.blog/feed/
+    category: engineering
+
+  - name: krebs-on-security
+    url: https://krebsonsecurity.com/feed/
+    category: security
+
+  - name: the-hacker-news
+    url: https://feeds.feedburner.com/TheHackersNews
+    category: security

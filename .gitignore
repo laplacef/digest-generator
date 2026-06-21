@@ -1,0 +1,63 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# Environment Variables
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Ruff
+.ruff_cache/
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pytest / Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Run output
+output/
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

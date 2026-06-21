@@ -1,0 +1,81 @@
+default_language_version:
+  python: python3.13
+
+default_stages: [pre-commit]
+
+fail_fast: false
+
+repos:
+  # Basic file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        name: Trim trailing whitespace
+      - id: end-of-file-fixer
+        name: Fix end of files
+      - id: check-yaml
+        name: Check YAML syntax
+      - id: check-toml
+        name: Check TOML syntax
+      - id: check-added-large-files
+        name: Check for large files
+        args: ['--maxkb=1000']
+      - id: check-case-conflict
+        name: Check for case conflicts
+      - id: check-merge-conflict
+        name: Check for merge conflicts
+      - id: detect-private-key
+        name: Detect private keys
+
+  # Project tools run via `uv run` as local hooks so pre-commit and CI use the
+  # same tool version (the uv-locked one) and the same project-aware config in
+  # pyproject.toml. No drift between hook `rev` pins and the lockfile, and no
+  # weaker isolated mypy environment.
+  #
+  # `--no-sync` runs each tool from the already-synced dev venv without
+  # re-syncing. A bare `uv run <tool>` would drop the `dev` extra mid-run.
+  # Requires `uv sync --extra dev` first (see CONTRIBUTING.md and CI).
+  - repo: local
+    hooks:
+      - id: ruff
+        name: Ruff linter
+        entry: uv run --no-sync ruff check --fix
+        language: system
+        types_or: [python, pyi]
+        require_serial: true
+      - id: ruff-format
+        name: Ruff formatter
+        entry: uv run --no-sync ruff format
+        language: system
+        types_or: [python, pyi]
+        require_serial: true
+      - id: mypy
+        name: Type checking with mypy
+        entry: uv run --no-sync mypy digest_generator/
+        language: system
+        types: [python]
+        pass_filenames: false
+      - id: bandit
+        name: Security checks with Bandit
+        entry: uv run --no-sync bandit -c pyproject.toml -r digest_generator/
+        language: system
+        types: [python]
+        pass_filenames: false
+
+  # Secret detection with Yelp/detect-secrets (entropy and regex scanner).
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        name: Secret detection (detect-secrets)
+        args: ["--baseline", ".secrets.baseline"]
+        exclude: ^(\.secrets\.baseline|\.gitleaks\.toml|uv\.lock)
+
+  # Secret detection with gitleaks, a regex scanner with broader default
+  # rule coverage than detect-secrets.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+        name: Secret detection (gitleaks)
