@@ -259,10 +259,6 @@ class TestConfiguration:
         options = summarizer._client.chat.call_args.kwargs["options"]
         assert "temperature" in options
 
-    @pytest.mark.xfail(
-        reason="Bundled summarizer prompt is a placeholder pending baseline content.",
-        strict=False,
-    )
     def test_system_prompt_loaded(self, summarizer, sample_entries):
         summarizer._client.chat.return_value = _mock_response("ok")
         asyncio.run(summarizer.summarize_entries(sample_entries[:1]))

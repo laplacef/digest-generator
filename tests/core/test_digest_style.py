@@ -146,15 +146,6 @@ class TestCatalogueContents:
 # =============================================================================
 
 
-# The bundled prompt templates ship as placeholders, so the tests below that
-# assert on specific prompt wording are expected to fail until the baseline
-# prompt content is written.
-_PLACEHOLDER_PROMPT_XFAIL = pytest.mark.xfail(
-    reason="Bundled prompt templates are placeholders pending baseline content.",
-    strict=False,
-)
-
-
 class TestLoadPromptResolution:
     @pytest.mark.parametrize(
         "template",
@@ -170,7 +161,6 @@ class TestLoadPromptResolution:
         text = load_prompt(template)
         assert "{{style:" not in text
 
-    @_PLACEHOLDER_PROMPT_XFAIL
     def test_editorial_pass_includes_canonical_catalogue(self):
         text = load_prompt("editorial_pass_system")
         assert '"This week saw..."' in text
@@ -178,39 +168,33 @@ class TestLoadPromptResolution:
         assert '"underscore," "underscores," "underscoring"' in text
         assert "Vendor X also released" in text
 
-    @_PLACEHOLDER_PROMPT_XFAIL
     def test_intro_includes_shared_catalogue_categories(self):
         text = load_prompt("intro_system")
         assert '"This week saw..."' in text
         assert '"The landscape of..."' in text
         assert '"crystallized"' in text  # was NOT in intro's pre-extraction list
 
-    @_PLACEHOLDER_PROMPT_XFAIL
     def test_watch_includes_weak_forecasts_and_shared_categories(self):
         text = load_prompt("watch_system")
         assert "race is on" in text
         assert '"took center stage"' in text
         assert '"underscore," "underscores," "underscoring"' in text
 
-    @_PLACEHOLDER_PROMPT_XFAIL
     def test_section_includes_enumeration_openers(self):
         text = load_prompt("section_system")
         assert "Vendor X also released" in text
         assert "On the [topic] front" in text
 
-    @_PLACEHOLDER_PROMPT_XFAIL
     def test_section_includes_shared_catalogue_categories(self):
         text = load_prompt("section_system")
         assert '"critical,"' in text
         assert '"underscore," "underscores," "underscoring"' in text
         assert '"took center stage"' in text
 
-    @_PLACEHOLDER_PROMPT_XFAIL
     def test_section_merge_includes_enumeration_openers(self):
         text = load_prompt("section_merge_system")
         assert "Vendor X also released" in text
 
-    @_PLACEHOLDER_PROMPT_XFAIL
     def test_section_merge_includes_shared_catalogue_categories(self):
         text = load_prompt("section_merge_system")
         assert '"critical,"' in text

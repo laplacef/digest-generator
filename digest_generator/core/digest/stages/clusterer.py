@@ -139,7 +139,7 @@ class ArticleClusterer:
         if not self.model:
             return [], "no_model_configured"
 
-        user_prompt = _build_user_prompt(indexed)
+        user_prompt = _build_user_prompt(indexed, self._categories)
         try:
             raw = self._call_llm(_CLUSTER_SYSTEM_PROMPT, user_prompt)
         except Exception as e:
@@ -204,13 +204,15 @@ def _assign_article_ids(
     return [(f"a{i:04d}", article) for i, article in enumerate(articles, start=1)]
 
 
-def _build_user_prompt(indexed: list[tuple[str, dict[str, Any]]]) -> str:
+def _build_user_prompt(indexed: list[tuple[str, dict[str, Any]]], categories: CategorySet) -> str:
     """Render the article blocks for the LLM. One ``<article>`` per input row.
 
-    Tags included: ``title``, ``source``, ``published`` (date only),
-    ``feed_section`` (the article's content_type), ``topics`` (top-N by
-    confidence), ``summary``, ``url``. Description and full content are
-    deliberately omitted; the summary is the dense substitute.
+    Opens with a ``<sections>`` block listing the configured category ids and
+    titles so the model routes clusters to real section ids. Tags per article:
+    ``title``, ``origin``, ``published`` (date only), ``feed_section`` (the
+    article's content_type), ``topics`` (top-N by confidence), ``summary``,
+    ``url``. Description and full content are deliberately omitted; the
+    summary is the dense substitute.
     """
     lines: list[str] = [
         "<task>",
@@ -219,8 +221,13 @@ def _build_user_prompt(indexed: list[tuple[str, dict[str, Any]]]) -> str:
         "sections). Output a JSON array per the system prompt's output-format.",
         "</task>",
         "",
-        "<articles>",
+        "<sections>",
     ]
+    for category in categories:
+        lines.append(f'  <section id="{category.id}">{category.title}</section>')
+    lines.append("</sections>")
+    lines.append("")
+    lines.append("<articles>")
     for aid, article in indexed:
         lines.append(f'<article id="{aid}">')
         lines.append(f"  <title>{_clean(article.get('title', ''))}</title>")

@@ -55,6 +55,17 @@ The tool ships with no feeds; you supply them in a `feeds.yaml`. Copy [`feeds.ex
 
 The file defines your own `categories:` (the digest sections, each an `id` + `title`, in section order) and a `feeds:` list where each feed's `category` matches one of those ids. Categories are user-defined, so the section taxonomy is whatever you put in the file. A missing or invalid file produces an actionable error pointing back at the example.
 
+### Prompt overrides
+
+Every LLM stage loads a Markdown prompt template. The bundled templates are generic and topic-neutral, so the tool runs out of the box on any subject. To tune the voice for your topic, drop a `<name>.md` file into a prompts directory; templates you don't override fall back to the bundled baseline. The loader checks, in order:
+
+1. `PROMPTS_DIR`
+2. `<config-dir>/prompts/` (from `--config` or `DIGEST_CONFIG`)
+3. `./digest-generator/prompts/` (project-local)
+4. `~/.config/digest-generator/prompts/` (user-level)
+
+The template names are `section_system`, `section_merge_system`, `editorial_pass_system`, `intro_system`, `title_system`, `watch_system`, `cluster_system`, and `article_summary_system`. Templates may reference the shared anti-cliché catalogue via `{{style:...}}` placeholders, which are expanded on whichever template is used.
+
 ### `run`: Full Pipeline
 
 Fetch articles, generate summaries, classify topics, and produce a digest.

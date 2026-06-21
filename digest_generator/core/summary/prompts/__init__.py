@@ -9,16 +9,17 @@ per process.
 The style catalogue lives at ``digest_generator.core.style`` (shared with the
 digest prompts); adding a forbidden phrase there propagates to both
 this package's templates and the digest templates on the next process load.
+A user can override the bundled template by dropping a ``<name>.md`` into a
+prompts directory; see ``digest_generator.core.prompt_loader`` for the order.
 """
 
 from pathlib import Path
 
-from digest_generator.core.style import expand_style_placeholders
+from digest_generator.core.prompt_loader import resolve_prompt
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 
 
 def load_prompt(name: str) -> str:
-    """Load a prompt template by name (without the ``.md`` extension)."""
-    raw = (_TEMPLATES_DIR / f"{name}.md").read_text(encoding="utf-8")
-    return expand_style_placeholders(raw)
+    """Load a prompt template by name (override dir first, else bundled)."""
+    return resolve_prompt(name, bundled_dir=_TEMPLATES_DIR)

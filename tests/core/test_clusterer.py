@@ -162,6 +162,15 @@ class TestClusterLLMPath:
         ):
             assert article in user_prompt
 
+    def test_user_prompt_lists_configured_sections(self, clusterer, results):
+        """The <sections> block names the configured category ids + titles."""
+        clusterer._client.chat.return_value = _mock_response("[]")
+        clusterer.cluster(results)
+        user_prompt = clusterer._client.chat.call_args.kwargs["messages"][1]["content"]
+        assert "<sections>" in user_prompt
+        assert '<section id="ai">AI & Machine Learning</section>' in user_prompt
+        assert '<section id="security">Security</section>' in user_prompt
+
 
 # =============================================================================
 # Soft failure modes: each drops back to the trivial fallback

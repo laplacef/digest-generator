@@ -72,8 +72,13 @@ class Settings(BaseSettings):
     # config-dir / project-local / user-level search path (see
     # digest_generator.sources.rss.config).
     feeds_file: str | None = None
-    # Config directory holding feeds.yaml. Maps to DIGEST_CONFIG.
+    # Config directory holding feeds.yaml (and optional prompts/ overrides).
+    # Maps to DIGEST_CONFIG.
     digest_config: str | None = None
+    # Directory of prompt-template overrides (<name>.md). When unset, the
+    # loader checks <DIGEST_CONFIG>/prompts/, then ./digest-generator/prompts/,
+    # then ~/.config/digest-generator/prompts/, else the bundled baselines.
+    prompts_dir: str | None = None
 
     # -- Fetcher --
     fetch_timeout: int = 10
