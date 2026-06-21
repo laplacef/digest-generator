@@ -16,11 +16,13 @@ from digest_generator.sources.rss.config import (
     FeedsConfigError,
     candidate_paths,
     discover_feeds_file,
+    example_feeds_text,
     load_categories,
     load_config,
     load_configured_categories,
     load_configured_feeds,
     load_feeds,
+    write_starter_feeds,
 )
 
 _CATEGORIES = """\
@@ -203,7 +205,50 @@ class TestLoadConfigured:
         _write(tmp_path, _VALID)
         assert len(load_configured_feeds(config_dir=str(tmp_path))) == 2
 
-    def test_not_found_error_points_at_example(self, tmp_path, isolated_discovery):
+    def test_not_found_error_suggests_init(self, tmp_path, isolated_discovery):
         with pytest.raises(FeedsConfigError) as exc:
             load_configured_feeds(feeds_file=str(tmp_path / "absent.yaml"))
-        assert "feeds.example.yaml" in str(exc.value)
+        assert "digest-generator init" in str(exc.value)
+
+
+class TestStarterFeeds:
+    """example_feeds_text / write_starter_feeds: the `init` scaffolding."""
+
+    def test_example_text_is_valid_config(self):
+        text = example_feeds_text()
+        assert "categories:" in text
+        assert "feeds:" in text
+
+    def test_writes_to_explicit_file_and_loads(self, tmp_path):
+        target = tmp_path / "feeds.yaml"
+        written = write_starter_feeds(feeds_file=str(target))
+        assert written == target
+        # The written starter round-trips through the loader.
+        categories, feeds = load_config(written)
+        assert len(categories) >= 1
+        assert len(feeds) >= 1
+
+    def test_writes_into_config_dir(self, tmp_path):
+        written = write_starter_feeds(config_dir=str(tmp_path))
+        assert written == tmp_path / "feeds.yaml"
+        assert written.is_file()
+
+    def test_default_target_is_user_config(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(config_module, "_USER_CONFIG_DIR", tmp_path / "cfg")
+        monkeypatch.setattr(settings, "feeds_file", None)
+        monkeypatch.setattr(settings, "digest_config", None)
+        written = write_starter_feeds()
+        assert written == tmp_path / "cfg" / "feeds.yaml"
+        assert written.is_file()
+
+    def test_no_clobber_without_force(self, tmp_path):
+        target = tmp_path / "feeds.yaml"
+        write_starter_feeds(feeds_file=str(target))
+        with pytest.raises(FeedsConfigError, match="already exists"):
+            write_starter_feeds(feeds_file=str(target))
+
+    def test_force_overwrites(self, tmp_path):
+        target = tmp_path / "feeds.yaml"
+        target.write_text("stale", encoding="utf-8")
+        write_starter_feeds(feeds_file=str(target), force=True)
+        assert "categories:" in target.read_text(encoding="utf-8")

@@ -1,11 +1,8 @@
-# Example feeds configuration for digest-generator.
+# Feeds configuration for digest-generator.
 #
-# Copy this file to one of the locations the loader searches, then edit it:
-#
-#   ./digest-generator/feeds.yaml        # project-local
-#   ~/.config/digest-generator/feeds.yaml # user-level
-#
-# Or point at it explicitly:  digest-generator run --feeds path/to/feeds.yaml
+# `digest-generator init` writes this starter; edit it to define your own
+# sections and feeds. The loader looks for feeds.yaml via --feeds, then
+# DIGEST_CONFIG, then ./digest-generator/, then ~/.config/digest-generator/.
 
 # Categories are the digest's sections, in order. Each has a stable id and a
 # display title. Feeds reference a category by its id. Define your own; the

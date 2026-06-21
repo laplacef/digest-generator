@@ -873,3 +873,35 @@ def feeds(
             typer.echo(f"  {f.name:<35} {f.url}")
 
     typer.echo(f"\nTotal: {len(filtered)} feeds")
+
+
+@app.command()
+def init(
+    config_dir: Annotated[
+        str | None,
+        typer.Option("--config", help="Config directory to write feeds.yaml into."),
+    ] = None,
+    feeds_file: Annotated[
+        str | None,
+        typer.Option("--feeds", help="Exact path to write the feeds.yaml to."),
+    ] = None,
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="Overwrite an existing feeds.yaml."),
+    ] = False,
+) -> None:
+    """Write a starter feeds.yaml to get started.
+
+    Defaults to ~/.config/digest-generator/feeds.yaml. Edit the file to add
+    your own categories and feeds, then run `digest-generator feeds` to check it.
+    """
+    from digest_generator.sources.rss.config import write_starter_feeds
+
+    try:
+        written = write_starter_feeds(feeds_file=feeds_file, config_dir=config_dir, force=force)
+    except (ValueError, OSError) as e:
+        typer.echo(f"Error: {e}")
+        raise typer.Exit(1) from None
+
+    typer.echo(f"Wrote starter feeds config to {written}")
+    typer.echo("Edit it to add your feeds, then run: digest-generator feeds")

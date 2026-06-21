@@ -35,11 +35,10 @@ Edit `.env` and set `HF_TOKEN`. Every other setting has a sensible default, so o
 
 ### 4. Configure feeds
 
-The tool ships with no feeds. Define your own by copying the example and editing it:
+The tool ships with no feeds. Write a starter and edit it:
 
 ```bash
-mkdir -p ~/.config/digest-generator
-cp feeds.example.yaml ~/.config/digest-generator/feeds.yaml
+uv run digest-generator init   # writes ~/.config/digest-generator/feeds.yaml
 ```
 
 The file has two blocks. `categories:` defines your digest sections (each a stable `id` and a display `title`), in the order they appear in the digest. `feeds:` lists each feed's `name`, `url`, and `category` (which must match one of your category ids). The loader searches, in order: a path passed via `--feeds`, then `<DIGEST_CONFIG>/feeds.yaml`, then `./digest-generator/feeds.yaml`, then `~/.config/digest-generator/feeds.yaml`. Point at any file directly with `digest-generator run --feeds path/to/feeds.yaml`.
@@ -54,7 +53,7 @@ uv run digest-generator feeds | head      # lists the feeds from your feeds.yaml
 uv run pytest -q                  # full test suite (all I/O mocked, no network)
 ```
 
-If `digest-generator --help` shows the seven subcommands (`run`, `fetch`, `summarize`, `label`, `digest`, `audio`, `feeds`) and the test suite passes, the core install is done. With a `feeds.yaml` in place you can smoke-test against real feeds with `digest-generator run -c ai --limit 3 --no-digest` (cap entries, skip digest).
+If `digest-generator --help` shows the subcommands (`init`, `run`, `fetch`, `summarize`, `label`, `digest`, `audio`, `feeds`) and the test suite passes, the core install is done. With a `feeds.yaml` in place you can smoke-test against real feeds with `digest-generator run -c ai --limit 3 --no-digest` (cap entries, skip digest).
 
 ---
 

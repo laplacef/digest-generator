@@ -17,6 +17,7 @@ Search order (first existing file wins):
 
 from __future__ import annotations
 
+from importlib.resources import files
 from pathlib import Path
 
 import yaml
@@ -27,6 +28,7 @@ from digest_generator.shared.settings import settings
 from digest_generator.sources.rss.types import Feed
 
 _CONFIG_FILENAME = "feeds.yaml"
+_EXAMPLE_FILENAME = "feeds.example.yaml"
 _PROJECT_DIR = "digest-generator"
 _USER_CONFIG_DIR = Path.home() / ".config" / "digest-generator"
 
@@ -191,8 +193,8 @@ def _resolve_config_path(
         msg = (
             "No feeds.yaml found. Searched:\n  "
             f"{searched}\n"
-            "Copy feeds.example.yaml to one of these locations (or pass "
-            "--feeds / --config) and add your feeds."
+            "Run 'digest-generator init' to create a starter feeds.yaml, "
+            "or pass --feeds / --config to point at an existing one."
         )
         raise FeedsConfigError(msg)
     return path
@@ -220,3 +222,46 @@ def load_configured_categories(
 ) -> CategorySet:
     """Discover and load the active category set. See ``load_configured_feeds``."""
     return load_categories(_resolve_config_path(feeds_file, config_dir))
+
+
+def example_feeds_text() -> str:
+    """Return the bundled starter ``feeds.yaml`` content.
+
+    Reads the copy packaged into the wheel, or, in a source checkout where it
+    is not packaged, the repo-root ``feeds.example.yaml``.
+    """
+    packaged = files("digest_generator") / _EXAMPLE_FILENAME
+    if packaged.is_file():
+        return packaged.read_text(encoding="utf-8")
+    root = Path(__file__).resolve().parents[3] / _EXAMPLE_FILENAME
+    return root.read_text(encoding="utf-8")
+
+
+def write_starter_feeds(
+    *,
+    feeds_file: str | Path | None = None,
+    config_dir: str | Path | None = None,
+    force: bool = False,
+) -> Path:
+    """Write a starter ``feeds.yaml`` and return the path written.
+
+    The target is the explicit ``feeds_file``, else ``<config_dir>/feeds.yaml``,
+    else ``~/.config/digest-generator/feeds.yaml``.
+
+    Raises:
+        FeedsConfigError: If the target already exists and ``force`` is False.
+    """
+    if feeds_file:
+        target = Path(feeds_file).expanduser()
+    elif config_dir:
+        target = Path(config_dir).expanduser() / _CONFIG_FILENAME
+    else:
+        target = _USER_CONFIG_DIR / _CONFIG_FILENAME
+
+    if target.exists() and not force:
+        msg = f"{target} already exists. Pass --force to overwrite it."
+        raise FeedsConfigError(msg)
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(example_feeds_text(), encoding="utf-8")
+    return target

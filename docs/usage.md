@@ -46,7 +46,7 @@ digest-generator --help
 
 ### Feed configuration
 
-The tool ships with no feeds; you supply them in a `feeds.yaml`. Copy [`feeds.example.yaml`](../feeds.example.yaml) to one of the discovered locations and edit it. Every command that touches feeds (`run`, `fetch`, `feeds`) resolves the file in this order:
+The tool ships with no feeds; you supply them in a `feeds.yaml`. Run `digest-generator init` to write a starter (defaults to `~/.config/digest-generator/feeds.yaml`; pass `--config <dir>` or `--feeds <path>` to choose where, `--force` to overwrite), or copy [`feeds.example.yaml`](../feeds.example.yaml) yourself. Every command that touches feeds (`run`, `fetch`, `feeds`) resolves the file in this order:
 
 1. `--feeds <file>` (or the `FEEDS_FILE` env var)
 2. `<config-dir>/feeds.yaml`, where the config dir comes from `--config` (or `DIGEST_CONFIG`)
