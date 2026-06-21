@@ -1,4 +1,4 @@
-"""CLI interface for the Feedmill pipeline.
+"""CLI interface for the digest-generator pipeline.
 
 Thin adapter over ``digest_generator.api``: parses arguments, delegates to the public API,
 and handles display/exit codes. No business logic lives here.

@@ -1,9 +1,9 @@
-"""Public programmatic API for the Feedmill pipeline.
+"""Public programmatic API for the digest-generator pipeline.
 
-Six entry points: four async per-stage primitives (``fetch``,
-``summarize``, ``label``, ``digest``), one composition function
-(``run``), and the audio renderer (``render_audio``). Each per-stage
-primitive is independently invocable and cache-aware: re-running on
+Six entry points: three async per-stage primitives (``fetch``,
+``summarize``, ``label``), the sync digest pipeline (``digest``), the
+``run`` composition, and the audio renderer (``render_audio``). Each
+per-stage primitive is independently invocable and cache-aware: re-running on
 the same ``run_dir`` skips work whose batch file already exists.
 
 Run setup (``run_dir`` creation, ``run_context``, ``log_stage``,
