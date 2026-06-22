@@ -1,6 +1,5 @@
 """Tests for digest_generator/core/digest/io.py: slugify, filename plus markdown builders, stage cache."""
 
-
 import pytest
 
 from digest_generator.core.digest.io import (
