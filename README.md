@@ -3,7 +3,7 @@
 [![Python](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.10+-red.svg)](https://pytorch.org/)
 [![CUDA](https://img.shields.io/badge/CUDA-13.0+-green.svg)](https://developer.nvidia.com/cuda-toolkit-archive)
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](./LICENSE.md)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/laplacef/digest-generator/blob/main/LICENSE.md)
 
 ## Overview
 
@@ -43,7 +43,7 @@ flowchart LR
 
 `digest-generator run` does both halves end to end, writing the JSON corpus and the final Markdown digest into the same run directory. You can also run the halves separately: `run --no-digest` stops after building the corpus, and `digest <run_dir>` turns an existing corpus into a digest.
 
-For full usage details, see [`docs/usage.md`](docs/usage.md).
+For full usage details, see [`docs/usage.md`](https://github.com/laplacef/digest-generator/blob/main/docs/usage.md).
 
 ## Installation
 
@@ -75,7 +75,7 @@ Every setting has a sensible default, so most setups need no environment variabl
 | `DIGEST_CONFIG` | Config directory holding `feeds.yaml` (and optional `prompts/`) | discovery |
 | `PROMPTS_DIR` | Directory of prompt-template overrides | bundled baselines |
 
-Every field in `digest_generator/shared/settings.py` maps to an uppercase env var. Full setup (prerequisites, optional audio rendering, optional GPU acceleration) is in [`docs/setup.md`](docs/setup.md).
+Every field in `digest_generator/shared/settings.py` maps to an uppercase env var. Full setup (prerequisites, optional audio rendering, optional GPU acceleration) is in [`docs/setup.md`](https://github.com/laplacef/digest-generator/blob/main/docs/setup.md).
 
 ## Usage
 
@@ -89,14 +89,14 @@ digest-generator audio <run_dir>      # render audio for an existing digest (no 
 digest-generator feeds                # list available feeds
 ```
 
-Each run lands in its own timestamped directory under `output/`, containing the per-stage caches, the final Markdown digest, run metadata, and a log of the run. See [`docs/usage.md`](docs/usage.md) for the full CLI reference, programmatic API, and output layout.
+Each run lands in its own timestamped directory under `output/`, containing the per-stage caches, the final Markdown digest, run metadata, and a log of the run. See [`docs/usage.md`](https://github.com/laplacef/digest-generator/blob/main/docs/usage.md) for the full CLI reference, programmatic API, and output layout.
 
 ## Contributing
 
-Bug reports, feature requests, and pull requests are all welcome. See [CONTRIBUTING.md](./CONTRIBUTING.md) for development setup, coding standards, and the contribution workflow.
+Bug reports, feature requests, and pull requests are all welcome. See [CONTRIBUTING.md](https://github.com/laplacef/digest-generator/blob/main/CONTRIBUTING.md) for development setup, coding standards, and the contribution workflow.
 
-This project follows a [Code of Conduct](./CODE_OF_CONDUCT.md). By participating, you are expected to uphold it.
+This project follows a [Code of Conduct](https://github.com/laplacef/digest-generator/blob/main/CODE_OF_CONDUCT.md). By participating, you are expected to uphold it.
 
 ## License
 
-This project is licensed under the [Apache License 2.0](./LICENSE.md). You are free to use, modify, and distribute this project, provided you include proper attribution. See the [NOTICE](./NOTICE.md) file for details.
+This project is licensed under the [Apache License 2.0](https://github.com/laplacef/digest-generator/blob/main/LICENSE.md). You are free to use, modify, and distribute this project, provided you include proper attribution. See the [NOTICE](https://github.com/laplacef/digest-generator/blob/main/NOTICE.md) file for details.
