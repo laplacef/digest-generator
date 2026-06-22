@@ -90,22 +90,55 @@ def slugify_title(title: str, max_length: int = 60) -> str:
     return truncated
 
 
-def build_digest_filename(result: DigestResult) -> str:
-    """Build the digest filename from a ``DigestResult``.
+def build_digest_slug(result: DigestResult) -> str:
+    """Build the stable, generic URL slug for a digest.
 
-    Format: ``{YYYY-MM-DD}-{slug-title}.md``
+    Returns the issue date (``YYYY-MM-DD``), emitted into the frontmatter
+    ``slug`` field. The slug is deliberately **title-independent**: it is
+    the digest's permanent identity as a dated issue, so editing the
+    ``title`` later changes the displayed name without moving the published
+    URL. Downstream consumers key the public URL off this field, never off
+    the title. It matches the deliverable's filename stem (see
+    ``build_digest_filename``).
+
+    One digest per date is assumed (the publish cadence is weekly); the
+    run *directory* name carries the collision-proof uniqueness for the
+    working artifact. A title cannot influence the slug, so adversarial
+    titles can't reach any URL or path built from it.
     """
-    slug = slugify_title(result.title)
-    return f"{result.date}-{slug}.md" if slug else f"{result.date}-digest.md"
+    return result.date
+
+
+def build_digest_filename(result: DigestResult) -> str:
+    """Build the stable on-disk filename for the digest deliverable.
+
+    Format: ``{date}.md`` (e.g. ``2026-03-17.md``) — the issue date, which
+    is stable, decoupled from the title, and matches the ``slug`` / public
+    URL / opus stem so every published artifact keys on the same date
+    string. Regenerating a digest in the same ``run_dir`` produces the same
+    date and overwrites this one file rather than spawning a second ``.md``
+    (which would make ``audio.io.find_digest_md`` ambiguous).
+
+    The run *directory* (``{date}-{HHmmss}-{hex}``) supplies collision-proof
+    uniqueness for the working artifact, so the deliverable inside it needs
+    only the date. The opus rendition shares this stem via
+    ``audio.io.opus_path_for_digest``, keeping both artifacts on one name.
+    """
+    return f"{result.date}.md"
 
 
 def build_digest_markdown(result: DigestResult) -> str:
     """Prepend YAML frontmatter to digest content for static site consumption.
 
-    Frontmatter fields, in order: title, date, reading_time, article_count,
-    summary, sections. ``summary`` is extracted from the first non-heading
-    paragraph of the composed content via ``_summary_for_frontmatter``, which
-    cuts on a real sentence boundary when one fits under the soft cap.
+    Frontmatter fields, in order: title, slug, date, reading_time,
+    article_count, summary, sections. ``title`` is the human-facing article
+    name and may be edited post-generation; ``slug`` is the stable, generic
+    URL slug (the issue date — see ``build_digest_slug``) the static site
+    keys the published URL off, decoupled from both the title and the
+    on-disk filename so a title edit never moves the URL. ``summary`` is
+    extracted from the first non-heading paragraph of the composed content via
+    ``_summary_for_frontmatter``, which cuts on a real sentence boundary when
+    one fits under the soft cap.
 
     The final string is normalized to ASCII whitespace via ``_INVISIBLE_WS_RE``
     so invisible Unicode separators emitted by upstream LLMs (U+00A0 nbsp,
@@ -114,9 +147,14 @@ def build_digest_markdown(result: DigestResult) -> str:
     """
     escaped_title = result.title.replace('"', '\\"')
 
+    # ``slug`` MUST be quoted. Unquoted ``slug: 2026-03-17`` is parsed by YAML
+    # as a Date, and Jekyll's UrlDrop#title calls ``.gsub`` on it while building
+    # the permalink, which raises on a non-string. ``date`` below is left
+    # unquoted on purpose: Jekyll expects a real Date there.
     lines = [
         "---",
         f'title: "{escaped_title}"',
+        f'slug: "{build_digest_slug(result)}"',
         f"date: {result.date}",
         f"reading_time: {result.reading_time_minutes} min",
         f"article_count: {result.article_count}",

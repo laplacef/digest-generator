@@ -788,7 +788,7 @@ def audio(
     run_dir: Annotated[
         Path,
         typer.Argument(
-            help="Path to a pipeline run directory containing the composed {date}-{slug}.md.",
+            help="Path to a pipeline run directory containing the composed {date}.md.",
         ),
     ],
     bitrate_kbps: Annotated[
@@ -803,7 +803,7 @@ def audio(
 
     Workhorse for iterating on the narration pre-pass, with no LLM cost:
     markdown -> Piper -> ffmpeg. Output lands at
-    ``{run_dir}/audio/{date}-{slug}.opus``. Cache-aware: re-running
+    ``{run_dir}/audio/{date}.opus``. Cache-aware: re-running
     against the same markdown + voice + bitrate is a no-op.
     """
     if not run_dir.is_dir():

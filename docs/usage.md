@@ -26,7 +26,7 @@ flowchart LR
         Wa --> Co
     end
 
-    MD[("YYYY-MM-DD-<br/>slug.md")]
+    MD[("date.md")]
 
     Feeds --> Fetch
     Summed --> W
@@ -166,7 +166,7 @@ digest-generator digest output/2026-03-15-143022-a3f1 --seed 42
 
 > First-time setup (install Piper + ffmpeg, configure audio env vars) is in [`setup.md`](./setup.md) under "Optional: Audio rendering". The reference below assumes those steps are done.
 
-Render the digest at `<run_dir>` to a Piper-narrated Opus file. This is the way to iterate on narration without re-running the LLM stages; it has no LLM cost. The `.opus` file lands at `<run_dir>/audio/{date}-{slug}.opus`, matching the digest filename. Re-running against the same markdown, voice, and bitrate is a no-op. Voice files come from the public `rhasspy/piper-voices` repo on first use, so no token is needed.
+Render the digest at `<run_dir>` to a Piper-narrated Opus file. This is the way to iterate on narration without re-running the LLM stages; it has no LLM cost. The `.opus` file lands at `<run_dir>/audio/{date}.opus`, matching the digest filename's stem. Re-running against the same markdown, voice, and bitrate is a no-op. Voice files come from the public `rhasspy/piper-voices` repo on first use, so no token is needed.
 
 ```bash
 # Render audio for an existing digest
@@ -297,10 +297,10 @@ output/2026-03-15-143022-a3f1/
 ├── assembly/clusters.json           # story-clustering cache
 ├── assembly/framing.json            # title + intro cache
 ├── assembly/watch.json              # what-to-watch cache
-├── audio/<date>-<slug>.opus         # rendered audio (only when --audio is used)
+├── audio/<date>.opus                # rendered audio (only when --audio is used)
 ├── audio/cache_key.txt              # audio render cache key
 ├── meta.json                        # run metadata (timestamps, counts, models)
-├── <date>-<slug>.md                 # the final digest
+├── <date>.md                        # the final digest (named for the issue date)
 └── run.log                          # self-contained log for this run
 ```
 
@@ -329,7 +329,7 @@ The final digest is assembled in a fixed structure:
 ...
 ```
 
-Section headings are plain text. The `## What to Watch` block is the only forward-looking part; the section bodies report what happened, not what comes next. Frontmatter fields, in order: `title`, `date`, `reading_time`, `article_count`, `summary`, `sections`.
+Section headings are plain text. The `## What to Watch` block is the only forward-looking part; the section bodies report what happened, not what comes next. Frontmatter fields, in order: `title`, `slug`, `date`, `reading_time`, `article_count`, `summary`, `sections`. The digest file is named for its issue date (`<date>.md`), a stable id that never changes if you edit the digest later; the `slug` field (also the issue date, `YYYY-MM-DD`) is the generic, title-independent URL a static site should publish under, so editing the `title` changes the displayed name without moving the URL.
 
 ## Configuration
 

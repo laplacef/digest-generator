@@ -510,9 +510,9 @@ def render_audio(
 ) -> Path:
     """Render the digest at ``run_dir`` to an Opus audio file.
 
-    Locates the deliverable ``{date}-{slug}.md`` at the run root,
+    Locates the deliverable ``{date}.md`` at the run root,
     narrates it via ``core.audio.narration``, synthesizes via Piper,
-    encodes via ffmpeg, and writes ``audio/{date}-{slug}.opus``.
+    encodes via ffmpeg, and writes ``audio/{date}.opus`` (shared stem).
     Cache-aware: re-running against the same markdown + voice + bitrate
     is a no-op (cache hit short-circuits at the renderer level).
 

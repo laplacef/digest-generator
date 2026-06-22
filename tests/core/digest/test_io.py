@@ -1,10 +1,12 @@
 """Tests for digest_generator/core/digest/io.py: slugify, filename plus markdown builders, stage cache."""
 
+
 import pytest
 
 from digest_generator.core.digest.io import (
     build_digest_filename,
     build_digest_markdown,
+    build_digest_slug,
     load_json_stage,
     load_section_drafts,
     save_json_stage,
@@ -48,9 +50,9 @@ class TestSlugifyTitle:
 
 
 class TestBuildDigestFilename:
-    """Digest filename: `{date}-{slug}.md` with `digest` fallback for empty titles."""
+    """Digest filename: `{date}.md`, stable and decoupled from the title."""
 
-    def test_basic_filename(self):
+    def test_uses_date(self):
         result = DigestResult(
             title="AI Agents Reshape Workflows",
             content="body",
@@ -59,29 +61,61 @@ class TestBuildDigestFilename:
             reading_time_minutes=1,
             article_count=10,
         )
-        assert build_digest_filename(result) == "2026-03-17-ai-agents-reshape-workflows.md"
+        assert build_digest_filename(result) == "2026-03-17.md"
 
-    def test_empty_title_fallback(self):
+    def test_independent_of_title(self):
+        # Same date -> same filename regardless of the digest title, so
+        # regenerating in place overwrites one file instead of spawning a
+        # second `.md` that would make `find_digest_md` ambiguous. Matches
+        # the slug + opus stem so every published artifact shares one name.
+        base = {
+            "content": "body",
+            "date": "2026-03-17",
+            "word_count": 100,
+            "reading_time_minutes": 1,
+            "article_count": 10,
+        }
+        first = build_digest_filename(DigestResult(title="Original", **base))
+        second = build_digest_filename(DigestResult(title="Very Different", **base))
+        assert first == second == "2026-03-17.md"
+
+
+class TestBuildDigestSlug:
+    """URL slug: the issue date, deliberately title-independent."""
+
+    def test_slug_is_the_date(self):
         result = DigestResult(
-            title="",
+            title="AI Agents Reshape Workflows",
             content="body",
             date="2026-03-17",
             word_count=100,
             reading_time_minutes=1,
             article_count=10,
         )
-        assert build_digest_filename(result) == "2026-03-17-digest.md"
+        assert build_digest_slug(result) == "2026-03-17"
+
+    def test_slug_independent_of_title(self):
+        # Different titles, same date -> same slug, so editing the title
+        # never moves the published URL.
+        base = {
+            "content": "body",
+            "date": "2026-03-17",
+            "word_count": 100,
+            "reading_time_minutes": 1,
+            "article_count": 10,
+        }
+        first = build_digest_slug(DigestResult(title="Original Title", **base))
+        second = build_digest_slug(DigestResult(title="A Completely Different Title", **base))
+        assert first == second == "2026-03-17"
 
 
 class TestSubprocessSafety:
-    """Defense-in-depth: digest filenames feed `shared/tts/engine.py`'s ffmpeg argv.
+    """Defense-in-depth: no title-derived string reaches a filename, URL, or argv.
 
-    A subprocess-safety audit verified that `slugify_title` + the
-    `{YYYY-MM-DD}-` date prefix structurally prevent leading-dash flag
-    injection and path-traversal characters in the resulting filename.
-    These tests pin that invariant against adversarial titles so a future
-    refactor (loosening the slugify regex, removing the date prefix) can't
-    silently regress the subprocess-argv safety contract.
+    Both the on-disk filename and the URL slug are the issue date —
+    independent of the user-influenced title — so the argv/path/URL attack
+    surface that a title-derived identifier would create is eliminated at
+    the source. This pins that an adversarial title cannot pollute the slug.
     """
 
     @pytest.mark.parametrize(
@@ -102,7 +136,7 @@ class TestSubprocessSafety:
             "trailing-dash-",
         ],
     )
-    def test_filename_is_flag_safe_and_path_traversal_safe(self, adversarial_title):
+    def test_adversarial_title_cannot_pollute_slug(self, adversarial_title):
         result = DigestResult(
             title=adversarial_title,
             content="body",
@@ -111,18 +145,8 @@ class TestSubprocessSafety:
             reading_time_minutes=1,
             article_count=10,
         )
-        name = build_digest_filename(result)
-        # Date prefix guarantees a digit-leading filename even when the slug
-        # is empty (fallback to "digest") or all-hyphens (stripped to empty).
-        assert name[0].isdigit(), f"filename must start with a digit, got {name!r}"
-        # No path separator can appear in the filename; slugify_title strips
-        # `/` and `\` along with every other non-`[a-z0-9\s-]` character.
-        assert "/" not in name, f"forward-slash leaked into {name!r}"
-        assert "\\" not in name, f"backslash leaked into {name!r}"
-        # Shell metacharacters can't appear, same slugify mechanism.
-        for metachar in (";", "&", "|", "$", "`", "<", ">", "(", ")"):
-            assert metachar not in name, f"shell metacharacter {metachar!r} in {name!r}"
-        assert name.endswith(".md")
+        # The slug is the date verbatim, regardless of the title.
+        assert build_digest_slug(result) == "2026-05-14"
 
 
 class TestBuildDigestMarkdown:
@@ -141,6 +165,7 @@ class TestBuildDigestMarkdown:
         md = build_digest_markdown(result)
         assert md.startswith("---\n")
         assert 'title: "AI Agents"' in md
+        assert 'slug: "2026-03-17"' in md  # quoted: unquoted YAML would parse as a Date
         assert "date: 2026-03-17" in md
         assert "reading_time: 1 min" in md
         assert "article_count: 42" in md
@@ -270,7 +295,7 @@ class TestBuildDigestMarkdown:
         assert len(summary_value) <= 158
 
     def test_frontmatter_field_order(self):
-        """summary must appear before sections so the YAML reads top-down like docs/usage.md."""
+        """Fields read top-down like docs/usage.md: title, slug, then summary before sections."""
         result = DigestResult(
             title="Title",
             content="# H\n\nLede paragraph.\n\n## AI",
@@ -281,9 +306,11 @@ class TestBuildDigestMarkdown:
             section_counts={"AI": 7, "Security": 5},
         )
         md = build_digest_markdown(result)
+        title_idx = md.index("title:")
+        slug_idx = md.index("slug:")
         summary_idx = md.index("summary:")
         sections_idx = md.index("sections:")
-        assert summary_idx < sections_idx
+        assert title_idx < slug_idx < summary_idx < sections_idx
 
 
 class TestInvisibleWhitespaceNormalization:

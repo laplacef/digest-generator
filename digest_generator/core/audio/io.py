@@ -2,10 +2,12 @@
 
 Slots into the run layout as one more peer subdirectory:
 ``output/{run_dir}/audio/`` holds the cache key sentinel and the
-deliverable ``.opus``. The slug-matching naming policy means
-``audio/{date}-{slug}.opus`` shares its stem with the deliverable
-``{date}-{slug}.md`` in the run root, so a downstream publish
-step can ``cp`` both without a rename step.
+deliverable ``.opus``. The stem-matching naming policy means
+``audio/{date}.opus`` shares its stem with the deliverable
+``{date}.md`` in the run root (both named for the issue date),
+so a downstream publish step can ``cp`` both without a rename step.
+The public URL comes from the digest's frontmatter ``slug`` field,
+which equals this same date stem.
 
 Cache key contract: SHA-256 over the digest markdown bytes, the voice
 id, the bitrate, the sentence-silence value, and the narration-version
@@ -44,8 +46,8 @@ def cache_key_path(run_dir: Path) -> Path:
 def opus_path_for_digest(run_dir: Path, digest_md_path: Path) -> Path:
     """Audio output path matching the digest deliverable's stem.
 
-    For example, ``{run_dir}/{date}-weekly-ai-digest.md`` maps to
-    ``{run_dir}/audio/{date}-weekly-ai-digest.opus``.
+    For example, ``{run_dir}/2026-03-17.md`` maps to
+    ``{run_dir}/audio/2026-03-17.opus``.
     """
     return audio_dir(run_dir) / f"{digest_md_path.stem}.opus"
 
@@ -104,7 +106,7 @@ def write_cache_key(run_dir: Path, key: str) -> None:
 
 
 def find_digest_md(run_dir: Path) -> Path:
-    """Locate the deliverable ``{date}-{slug}.md`` in the run root.
+    """Locate the deliverable ``{date}.md`` in the run root.
 
     The composer writes exactly one ``.md`` file at the run root.
     Caller-facing helpers (``api.render_audio``, ``cli.audio``) use this

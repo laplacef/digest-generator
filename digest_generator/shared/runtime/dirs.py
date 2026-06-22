@@ -23,8 +23,8 @@ def create_run_dir(output_dir: Path | None = None) -> Path:
             section-drafts/<section>.json
             section-edits/<section>.json
             assembly/{clusters,framing,watch}.json
-            audio/{*.opus,cache_key.txt}
-            {date}-{slug}.md
+            audio/{date}.opus, audio/cache_key.txt
+            {date}.md
             meta.json
             run.log
 

@@ -325,7 +325,7 @@ def markdown_to_narration(
 
     Args:
         md_text: Source markdown (typically the composer's
-            ``{date}-{slug}.md`` deliverable).
+            ``{date}.md`` deliverable).
         overrides: Pronunciation overrides; falls back to the bundled
             ``narration_overrides.yaml`` when ``None``. Pass ``{}`` to
             disable overrides entirely.

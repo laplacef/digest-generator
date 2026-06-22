@@ -152,9 +152,10 @@ def encode_opus(
 
     # `--` separates options from the positional output path. This defends
     # against flag injection via a `-`-leading filename, independent of the
-    # slug + date-prefix invariant in
-    # `core/digest/io.py:build_digest_filename` that already prevents such
-    # filenames (see TestSubprocessSafety in tests/core/digest/test_io.py).
+    # date-based naming invariant in `core/digest/io.py:build_digest_filename`
+    # (opus stems derive from the digit-leading issue date, never from a
+    # user-influenced title) that already prevents such filenames (see
+    # TestSubprocessSafety in tests/core/digest/test_io.py).
     cmd = [
         binary,
         "-loglevel",

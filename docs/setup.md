@@ -99,7 +99,7 @@ What happens on first run:
 
 - Downloads ~63 MB of Piper voice files to `~/.cache/digest_generator/piper-voices/` (pinned to the `rhasspy/piper-voices` `v1.0.0` tag via `AUDIO_VOICE_REVISION`).
 - Runs the narration pre-pass, then Piper synthesis, then ffmpeg encoding.
-- Writes `output/<run-dir>/audio/<date>-<slug>.opus` + `audio/cache_key.txt`.
+- Writes `output/<run-dir>/audio/<date>.opus` + `audio/cache_key.txt`.
 - Echoes the `.opus` path on stdout.
 
 Subsequent runs against the same `(md, voice, bitrate)` triple are sub-second cache hits.
