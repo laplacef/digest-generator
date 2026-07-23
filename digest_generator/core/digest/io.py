@@ -20,7 +20,6 @@ from digest_generator.core.digest.types import DigestResult, SectionDraft
 from digest_generator.shared.logging import logger
 
 _SUMMARY_SOFT_CAP = 200
-_SUMMARY_HARD_CAP = 155
 _SENTENCE_END_RE = re.compile(r"[.!?](?=\s|$)")
 
 # Invisible Unicode whitespace LLMs sometimes emit as unit separators
@@ -35,33 +34,32 @@ _INVISIBLE_WS_RE = re.compile(r"[\u00A0\u2009\u202F]")
 
 
 def _summary_for_frontmatter(text: str) -> str:
-    """Pick a meta-description summary that ends on a sentence boundary.
+    """Pick a self-contained meta-description summary that is a whole sentence.
 
     The frontmatter ``summary`` field renders as the search-engine snippet and
-    social-card description. Cutting mid-clause produces half-sentences on link
-    previews ("…contributing to a drop in the average exploit lifecycle from…"),
-    so the summary ends on a real sentence terminator.
+    social-card description, so a mid-sentence cut ("…showing how enterprise...")
+    is the blurb every link preview and search result shows. The summary is
+    therefore ALWAYS a complete sentence, never a truncated fragment with a
+    trailing ellipsis.
 
-    Walks sentence boundaries within the lede and packs as many full sentences
-    as fit under ``_SUMMARY_SOFT_CAP``. If the first sentence alone exceeds the
-    soft cap (or the lede has no terminator at all), falls back to
-    word-boundary truncation at ``_SUMMARY_HARD_CAP`` with an ellipsis.
+    Packs as many full sentences as fit under ``_SUMMARY_SOFT_CAP``, but always
+    keeps at least the first complete sentence even when it alone exceeds the
+    cap: search and social truncate the *display*, so a whole sentence slightly
+    over budget beats a stored half-sentence. A lede with no sentence terminator
+    at all (degenerate) is returned whole rather than cut mid-word.
     """
     text = text.strip()
     if not text:
         return ""
     boundaries = [m.end() for m in _SENTENCE_END_RE.finditer(text)]
     if not boundaries:
-        return text[:_SUMMARY_HARD_CAP].rsplit(" ", 1)[0] + "..."
+        return text
     chosen_end = boundaries[0]
     for end in boundaries[1:]:
         if end > _SUMMARY_SOFT_CAP:
             break
         chosen_end = end
-    candidate = text[:chosen_end]
-    if len(candidate) <= _SUMMARY_SOFT_CAP:
-        return candidate
-    return text[:_SUMMARY_HARD_CAP].rsplit(" ", 1)[0] + "..."
+    return text[:chosen_end]
 
 
 def slugify_title(title: str, max_length: int = 60) -> str:
@@ -138,8 +136,8 @@ def build_digest_markdown(result: DigestResult) -> str:
     keys the published URL off, decoupled from both the title and the
     on-disk filename so a title edit never moves the URL. ``summary`` is
     extracted from the first non-heading paragraph of the composed content via
-    ``_summary_for_frontmatter``, which cuts on a real sentence boundary when
-    one fits under the soft cap.
+    ``_summary_for_frontmatter``, which always ends on a real sentence boundary
+    (never a mid-sentence ellipsis).
 
     The title and body pass through ``normalize_output`` first — the terminal,
     deterministic mechanical pass (locale, scale/currency abbreviations, leaked

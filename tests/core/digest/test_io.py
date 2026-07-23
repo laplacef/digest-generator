@@ -3,6 +3,7 @@
 import pytest
 
 from digest_generator.core.digest.io import (
+    _SUMMARY_SOFT_CAP,
     build_digest_filename,
     build_digest_markdown,
     build_digest_slug,
@@ -210,9 +211,9 @@ class TestBuildDigestMarkdown:
         md = build_digest_markdown(result)
         assert 'summary: "This is the executive summary paragraph."' in md
 
-    def test_truncates_long_summary(self):
-        """Summary with no sentence terminators should ellipsis-truncate at word boundary."""
-        long_paragraph = "This is a very important " * 10  # ~250 chars, no periods
+    def test_summary_with_no_terminator_returned_whole(self):
+        """A lede with no sentence terminator is returned whole, never ellipsis-cut."""
+        long_paragraph = ("This is a very important note " * 8).strip()  # no periods
         result = DigestResult(
             title="Title",
             content=f"# Heading\n\n{long_paragraph}\n\n## Section",
@@ -225,8 +226,8 @@ class TestBuildDigestMarkdown:
         for line in md.split("\n"):
             if line.startswith("summary:"):
                 summary_value = line.split('"')[1]
-                assert len(summary_value) <= 158  # 155 + "..."
-                assert summary_value.endswith("...")
+                assert summary_value == long_paragraph
+                assert "..." not in summary_value
                 break
         else:
             pytest.fail("No summary line found in frontmatter")
@@ -275,14 +276,14 @@ class TestBuildDigestMarkdown:
         assert summary_value == lede
         assert "..." not in summary_value
 
-    def test_summary_falls_back_when_first_sentence_exceeds_soft_cap(self):
-        """A single 250-char sentence: no boundary fits, so ellipsis fallback at hard cap."""
-        long_sentence = "X " * 130 + "Y."  # ~262 chars, ends with period
+    def test_summary_keeps_whole_first_sentence_over_cap(self):
+        """A single sentence longer than the soft cap comes through whole, not ellipsis-cut."""
+        long_sentence = "word " * 60 + "end."  # ~304 chars, one sentence
         result = DigestResult(
             title="Title",
             content=f"# Heading\n\n{long_sentence}\n\n## Section",
             date="2026-05-03",
-            word_count=130,
+            word_count=60,
             reading_time_minutes=1,
             article_count=1,
         )
@@ -290,8 +291,9 @@ class TestBuildDigestMarkdown:
         summary_value = next(
             line.split('"')[1] for line in md.split("\n") if line.startswith("summary:")
         )
-        assert summary_value.endswith("...")
-        assert len(summary_value) <= 158
+        assert summary_value.endswith("end.")
+        assert "..." not in summary_value
+        assert len(summary_value) > _SUMMARY_SOFT_CAP
 
     def test_frontmatter_field_order(self):
         """Fields read top-down like docs/usage.md: title, slug, then summary before sections."""
