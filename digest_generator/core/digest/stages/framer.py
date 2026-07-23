@@ -17,6 +17,7 @@ from ollama import Client
 
 from digest_generator.core.digest.prompts import load_prompt
 from digest_generator.core.digest.types import DigestFraming, SectionDraft
+from digest_generator.core.style import TITLE_PATTERNS
 from digest_generator.shared.llm.clients import client_registry
 from digest_generator.shared.llm.sampling import SamplingConfig, resolve_ollama_options
 from digest_generator.shared.llm.telemetry import chat_with_logging
@@ -27,45 +28,11 @@ from digest_generator.shared.settings import settings
 _TITLE_SYSTEM_PROMPT = load_prompt("title_system")
 _INTRO_SYSTEM_PROMPT = load_prompt("intro_system")
 
-_BRAND_LED_VERBS = (
-    "Finds",
-    "Releases",
-    "Launches",
-    "Unveils",
-    "Announces",
-    "Reveals",
-    "Drops",
-    "Ships",
-    "Patches",
-    "Debuts",
-    "Introduces",
-    "Adds",
-    "Brings",
-    "Delivers",
-    "Rolls Out",
-)
-
-_FORBIDDEN_TITLE_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
-    (
-        re.compile(r"^AI\s"),
-        "starts with 'AI ' — AI is the digest's topic, not news",
-    ),
-    (
-        re.compile(r"^\w+:\s"),
-        "uses the 'X: Y' colon-split format",
-    ),
-    (
-        re.compile(
-            r"^(?:[A-Z][a-zA-Z0-9]*\s+){1,3}(?:"
-            + "|".join(v.replace(" ", r"\s+") for v in _BRAND_LED_VERBS)
-            + r")\s",
-        ),
-        (
-            "leads with a brand/product name plus a generic announcement verb "
-            "(e.g. 'OpenAI Releases', 'Claude Mythos Finds') — reads like vendor "
-            "marketing, not editorial framing"
-        ),
-    ),
+# Forbidden title shapes live in ``digest_generator.core.style`` (single source
+# of truth shared with the golden-output lint). Compiled once here for the
+# retry-with-feedback guard below.
+_FORBIDDEN_TITLE_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = tuple(
+    (re.compile(pattern), reason) for pattern, reason in TITLE_PATTERNS
 )
 
 
