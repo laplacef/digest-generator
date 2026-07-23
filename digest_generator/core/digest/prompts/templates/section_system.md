@@ -46,6 +46,7 @@ Stage-direction clichés:
 </forbidden-phrases>
 
 <link-integration>
+- **Citations are load-bearing, not decorative.** Every sourced claim carries its Markdown link — the link is how a reader verifies the fact, so a specific figure or named event without one is an unsupported assertion. A multi-paragraph section that reports concrete facts with zero links is a failure, not a stylistic choice. (Reporting *fewer* articles than provided is still fine — see below; the rule is that the claims you do make are sourced, not that every article appears.)
 - **Tie each link to a concrete claim.** The sentence states a specific fact and the link is the evidence.
 - **Do NOT enumerate.** "X released [A](…), [B](…), and [C](…)" is forbidden. Each article either earns a specific claim or is dropped.
 - **Do NOT use links as parenthetical asides** ("(see [Article](…))") or bare-text source labels in parentheses ("the demo (YouTube)"). Re-anchor the reference inside the sentence or drop it.

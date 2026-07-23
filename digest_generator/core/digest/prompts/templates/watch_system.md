@@ -36,6 +36,7 @@ When the user prompt includes a `<clusters>` block, each `<cluster>` element is 
 - **Prefer multi-cluster combinations.** A watch item built from two cluster ledes describing different stories is the canonical shape; restating one lede alone is not.
 - **Multi-article clusters carry more signal** and are listed first.
 - **The index is a navigation aid, not the corpus.** The full evidence lives in the `<sections>` content; use the index to find candidate combinations, then read the section text for the concrete facts.
+- **Cluster ids are internal handles, never output.** The `id` (e.g. `c0007`) exists only so you can reference a cluster while reasoning. It MUST NOT appear in any heading or body — not as a citation, not in parentheses, not anywhere a reader sees. Name the entities and facts, never the handle.
 </cluster-index>
 
 <forbidden-phrases>
