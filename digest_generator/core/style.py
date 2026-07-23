@@ -99,6 +99,20 @@ ABSTRACT_LANDSCAPE_OPENERS: list[ForbiddenPhrase] = [
     ForbiddenPhrase('"The intersection of..."', pattern=r"(?i)\bthe intersection of\b"),
     ForbiddenPhrase('"In the realm of..."', pattern=r"(?i)\bin the realm of\b"),
     ForbiddenPhrase('"Beneath the X,"'),
+    # Vague thesis-*shaped* abstractions — grammatically a claim, but the subject
+    # is a category noun and the verb is a directionless progression, so nothing
+    # is falsifiable. No pattern: telling this apart from a concrete thesis
+    # ("Enterprise AI is shifting from chatbots to agents") is a judgment call the
+    # editor makes in context, not a regex. See the editorial <paragraph-shape>.
+    ForbiddenPhrase(
+        '"Deployment strategies are moving toward..." / "<category noun> are evolving'
+        ' toward..." (abstract subject + directionless progression verb, naming no'
+        " concrete actor and no falsifiable claim; name who did what and what changed)"
+    ),
+    ForbiddenPhrase(
+        '"Hardware and infrastructure are evolving to support..." (category nouns as the'
+        " subject of a vague evolution; lead with the entity that shipped or changed something)"
+    ),
 ]
 
 FILLER_ADJECTIVES: list[ForbiddenPhrase] = [

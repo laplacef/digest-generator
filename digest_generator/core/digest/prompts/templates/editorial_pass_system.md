@@ -56,8 +56,9 @@ Scan the whole draft for repeated cliché phrases and rewrite all but one occurr
 <paragraph-shape>
 The drafter writes thesis-led paragraphs, not item lists. Preserve that shape:
 
-- **If a paragraph already opens with a thesis, leave the opener alone.** Only edit within the paragraph for clarity, repetition, or forbidden phrasing.
-- **Do NOT rewrite a thesis-led opener into an item-led one.** The enumeration shapes above are forbidden as rewrite targets too.
+- **Leave a concrete thesis opener alone.** A concrete thesis names specific subjects (an organization, a product, a named shift with both its start and its destination) and makes a claim sharp enough to be wrong. Only edit within the paragraph for clarity, repetition, or forbidden phrasing.
+- **Rewrite a vague thesis-*shaped* opener.** An opener can be grammatically thesis-shaped yet name no concrete subject and make no falsifiable claim — "Deployment strategies are moving toward multi-agent orchestration", "Hardware and infrastructure are evolving to support…". That is abstraction wearing a thesis costume, and across a section these produce the "X is shifting / moving / evolving toward Y" monotony that reads as machine-generated. Rewrite into an opener that names the actual subject and what specifically changed. Contrast: "Enterprise AI is shifting from chatbots to agents, forcing a redesign of identity layers" names a start, a destination, and a falsifiable consequence, so it stays; "the landscape is shifting toward agents" is vague and gets rewritten.
+- **Do NOT rewrite a thesis-led opener into an item-led one.** The enumeration shapes above are forbidden as rewrite targets too; name the concrete subject rather than falling back to "Vendor X also released…".
 - **The exception:** when an interior paragraph opens with an actually-forbidden phrase from `<forbidden-openers>`, rewrite it into a thesis, not an item-led opener.
 </paragraph-shape>
 
