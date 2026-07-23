@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import re
 import sys
+import threading
 from contextlib import contextmanager
 from contextvars import ContextVar
 from pathlib import Path
@@ -233,16 +234,23 @@ class StageSpan:
     - ``add(**fields)`` sums numeric values, overwrites non-numeric; use when
       a field accumulates across multiple internal calls (e.g., a stage's
       total ``prompt_tokens`` summed over per-batch LLM requests).
+
+    Both methods hold a lock: a fanned-out stage (the writer drafts sections
+    concurrently) has multiple threads calling ``add`` on one shared span via
+    ``chat_with_logging``, and ``add``'s read-modify-write would otherwise lose
+    increments. The lock is uncontended on the serial path.
     """
 
-    __slots__ = ("fields",)
+    __slots__ = ("_lock", "fields")
 
     def __init__(self) -> None:
         self.fields: dict[str, Any] = {}
+        self._lock = threading.Lock()
 
     def set(self, **fields: Any) -> None:
         """Record fields to include in the ``stage.done`` log line (overwrite)."""
-        self.fields.update(fields)
+        with self._lock:
+            self.fields.update(fields)
 
     def add(self, **fields: Any) -> None:
         """Accumulate numeric fields; overwrite non-numeric.
@@ -252,19 +260,24 @@ class StageSpan:
         ``llm_calls``). Booleans are treated as non-numeric to avoid
         ``True + True == 2`` surprises.
         """
-        for key, value in fields.items():
-            current = self.fields.get(key)
-            if (
-                isinstance(value, int | float)
-                and not isinstance(value, bool)
-                and isinstance(current, int | float)
-                and not isinstance(current, bool)
-            ):
-                self.fields[key] = current + value
-            elif isinstance(value, int | float) and not isinstance(value, bool) and current is None:
-                self.fields[key] = value
-            else:
-                self.fields[key] = value
+        with self._lock:
+            for key, value in fields.items():
+                current = self.fields.get(key)
+                if (
+                    isinstance(value, int | float)
+                    and not isinstance(value, bool)
+                    and isinstance(current, int | float)
+                    and not isinstance(current, bool)
+                ):
+                    self.fields[key] = current + value
+                elif (
+                    isinstance(value, int | float)
+                    and not isinstance(value, bool)
+                    and current is None
+                ):
+                    self.fields[key] = value
+                else:
+                    self.fields[key] = value
 
 
 _active_span: ContextVar[StageSpan | None] = ContextVar("_active_span", default=None)

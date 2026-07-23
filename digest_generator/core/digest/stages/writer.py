@@ -8,6 +8,8 @@ Uses the native ``ollama`` client via DI from ``ClientRegistry``.
 Configured via ``WRITER_MODEL`` environment variable.
 """
 
+import contextvars
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
@@ -25,6 +27,9 @@ from digest_generator.shared.settings import settings
 
 _SECTION_SYSTEM_PROMPT = load_prompt("section_system")
 _SECTION_MERGE_SYSTEM_PROMPT = load_prompt("section_merge_system")
+
+# One map-phase unit: (section display name, ranked articles, cross-references).
+type _SectionTask = tuple[str, list[dict[str, Any]], list[Cluster]]
 
 
 class SectionWriter:
@@ -97,25 +102,41 @@ class SectionWriter:
         *,
         date_range: tuple[str, str] | None = None,
     ) -> list[SectionDraft]:
-        """Map phase: one ``SectionDraft`` per category in section order."""
-        drafts: list[SectionDraft] = []
+        """Map phase: one ``SectionDraft`` per category, in section order.
+
+        Sections are independent, so they draft concurrently on a thread pool.
+        Each task runs under a copy of the caller's context, so the writer's
+        ``log_stage`` span, ``TokenCounter``, and ``stage`` binding propagate
+        into the worker threads and telemetry accumulates correctly (the span
+        and counter are lock-guarded for concurrent ``add`` / ``record``).
+        Actual LLM in-flight concurrency is still bounded globally by the
+        ``OLLAMA_CONCURRENCY`` semaphore inside ``chat_with_logging``; the pool
+        only lets every section reach that semaphore at once. Results are
+        collected in submission order, so section order is preserved.
+        """
+        tasks: list[_SectionTask] = []
         for category in self._categories:
             articles = grouped.get(category.id, [])
             section_cross_refs = cross_refs.get(category.id, [])
-            if not articles and not section_cross_refs:
-                continue
             if not articles:
-                # Section has only cross-references and no primary articles,
-                # so skip rather than emit an empty section. The cross-references
-                # for this section can only appear inline with primary content;
-                # without that anchor the secondary references would float.
-                logger.debug(
-                    "Skipping {} section — {} cross-refs but no primary articles",
-                    category.title,
-                    len(section_cross_refs),
-                )
+                if section_cross_refs:
+                    # Section has only cross-references and no primary articles,
+                    # so skip rather than emit an empty section. The cross-refs
+                    # can only appear inline with primary content; without that
+                    # anchor the secondary references would float.
+                    logger.debug(
+                        "Skipping {} section — {} cross-refs but no primary articles",
+                        category.title,
+                        len(section_cross_refs),
+                    )
                 continue
-            display_name = category.title
+            tasks.append((category.title, articles, section_cross_refs))
+
+        if not tasks:
+            return []
+
+        def _draft_one(task: _SectionTask) -> str:
+            display_name, articles, section_cross_refs = task
             logger.info(
                 "Generating {} section ({} articles, {} cross-refs) via {}",
                 display_name,
@@ -123,9 +144,22 @@ class SectionWriter:
                 len(section_cross_refs),
                 self.model,
             )
-            content = self._write_section(
+            return self._write_section(
                 display_name, articles, section_cross_refs, date_range=date_range
             )
+
+        if len(tasks) == 1:
+            contents = [_draft_one(tasks[0])]
+        else:
+            with ThreadPoolExecutor(max_workers=len(tasks)) as executor:
+                futures = [
+                    executor.submit(contextvars.copy_context().run, _draft_one, task)
+                    for task in tasks
+                ]
+                contents = [future.result() for future in futures]
+
+        drafts: list[SectionDraft] = []
+        for (display_name, articles, _), content in zip(tasks, contents, strict=True):
             if not content:
                 continue
             logger.debug(

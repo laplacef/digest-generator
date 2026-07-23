@@ -4,6 +4,7 @@ SectionWriter covers only the map phase of digest generation: articles to
 SectionDraft. Synthesis, title, and framing live in separate modules.
 """
 
+import threading
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -15,6 +16,8 @@ from digest_generator.core.digest.stages.writer import (
     SectionWriter,
 )
 from digest_generator.core.digest.types import Cluster, SectionDraft
+from digest_generator.shared.llm import telemetry
+from digest_generator.shared.llm.telemetry import llm_telemetry
 
 
 @pytest.fixture
@@ -452,6 +455,93 @@ class TestWriteAllFromJson:
             "Engineering",
             "Security",
         }
+
+
+# =============================================================================
+# Concurrent map phase: sections draft in parallel, order + telemetry preserved
+# =============================================================================
+
+
+class TestConcurrentDrafting:
+    def test_preserves_section_order_with_per_section_content(self, writer, sample_articles):
+        """Order follows category order, and each draft keeps its own content."""
+
+        def fake_chat(**kwargs: Any) -> MagicMock:
+            user_prompt = kwargs["messages"][1]["content"]
+            # The section name is embedded in the user prompt; echo a marker.
+            name = next(
+                (n for n in ("Machine Learning", "Security", "Engineering") if n in user_prompt),
+                "Unknown",
+            )
+            resp = MagicMock()
+            resp.message.content = f"## {name}\n\nBody for {name}."
+            return resp
+
+        writer._client.chat.side_effect = fake_chat
+
+        drafts = writer.write_all_from_json({"feed1": sample_articles})
+
+        expected_order = [
+            c.title for c in writer._categories if c.title in {d.name for d in drafts}
+        ]
+        assert [d.name for d in drafts] == expected_order
+        # Each section's body is its own — not one section's content copied across.
+        for draft in drafts:
+            assert draft.content.endswith(".")
+            assert "Body for" in draft.content
+
+    def test_sections_draft_concurrently(self, writer, sample_articles):
+        """A barrier the size of the section count only clears if calls overlap.
+
+        If the map phase were serial, the first ``barrier.wait`` would block
+        until the timeout and raise, failing the test. Concurrent drafting lets
+        all sections reach the barrier together.
+        """
+        section_count = 3  # sample_articles spans ai / security / engineering
+        barrier = threading.Barrier(section_count, timeout=5)
+
+        def fake_chat(**kwargs: Any) -> MagicMock:
+            barrier.wait()  # raises BrokenBarrierError on timeout if run serially
+            resp = MagicMock()
+            resp.message.content = "## Body\n\nBody."
+            return resp
+
+        writer._client.chat.side_effect = fake_chat
+
+        # Force semaphore capacity >= section_count so the global in-flight cap
+        # is not itself the reason calls can't overlap in this test.
+        telemetry._ollama_semaphore = threading.Semaphore(section_count)
+        try:
+            drafts = writer.write_all_from_json({"feed1": sample_articles})
+        finally:
+            telemetry._ollama_semaphore = None  # reset lazy singleton for other tests
+
+        assert len(drafts) == section_count
+
+    def test_telemetry_accumulates_across_concurrent_sections(self, writer, sample_articles):
+        """Token totals sum correctly across parallel sections (locks hold)."""
+
+        def fake_chat(**kwargs: Any) -> MagicMock:
+            resp = MagicMock()
+            resp.message.content = "## Body\n\nBody."
+            resp.prompt_eval_count = 10
+            resp.eval_count = 5
+            resp.eval_duration = 1_000_000  # 1 ms in ns
+            return resp
+
+        writer._client.chat.side_effect = fake_chat
+        telemetry._ollama_semaphore = threading.Semaphore(8)
+        try:
+            with llm_telemetry() as counter:
+                drafts = writer.write_all_from_json({"feed1": sample_articles})
+        finally:
+            telemetry._ollama_semaphore = None
+
+        assert len(drafts) == 3
+        # One LLM call per section; totals must not lose increments to a race.
+        assert counter.llm_calls == 3
+        assert counter.prompt_tokens == 30
+        assert counter.completion_tokens == 15
 
 
 # =============================================================================

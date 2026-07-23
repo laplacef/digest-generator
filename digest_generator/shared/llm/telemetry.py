@@ -94,6 +94,10 @@ class TokenCounter:
     Stages indirectly write to it via ``record_llm_call`` (called from
     ``chat_with_logging``); the surrounding pipeline reads the totals at
     the end and emits its own ``*.tokens`` summary line.
+
+    ``record`` holds a lock: when a stage fans out (the writer drafts sections
+    concurrently), several threads call it at once, and its ``+=`` accumulation
+    would otherwise drop increments. The lock is uncontended on the serial path.
     """
 
     prompt_tokens: int = 0
@@ -101,6 +105,7 @@ class TokenCounter:
     llm_calls: int = 0
     llm_duration_ms: int = 0
     per_stage: dict[str, dict[str, int]] = field(default_factory=dict)
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
 
     def record(
         self,
@@ -111,19 +116,20 @@ class TokenCounter:
         duration_ms: int,
     ) -> None:
         """Accumulate one LLM call's metrics into the run totals."""
-        self.prompt_tokens += prompt_tokens
-        self.completion_tokens += completion_tokens
-        self.llm_calls += 1
-        self.llm_duration_ms += duration_ms
+        with self._lock:
+            self.prompt_tokens += prompt_tokens
+            self.completion_tokens += completion_tokens
+            self.llm_calls += 1
+            self.llm_duration_ms += duration_ms
 
-        bucket = self.per_stage.setdefault(
-            stage,
-            {"prompt_tokens": 0, "completion_tokens": 0, "llm_calls": 0, "llm_duration_ms": 0},
-        )
-        bucket["prompt_tokens"] += prompt_tokens
-        bucket["completion_tokens"] += completion_tokens
-        bucket["llm_calls"] += 1
-        bucket["llm_duration_ms"] += duration_ms
+            bucket = self.per_stage.setdefault(
+                stage,
+                {"prompt_tokens": 0, "completion_tokens": 0, "llm_calls": 0, "llm_duration_ms": 0},
+            )
+            bucket["prompt_tokens"] += prompt_tokens
+            bucket["completion_tokens"] += completion_tokens
+            bucket["llm_calls"] += 1
+            bucket["llm_duration_ms"] += duration_ms
 
 
 _counter: ContextVar[TokenCounter | None] = ContextVar("_llm_token_counter", default=None)
