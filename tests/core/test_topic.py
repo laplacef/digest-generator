@@ -12,6 +12,7 @@ import pytest
 import torch
 
 from digest_generator.core.label import TopicClassifier
+from digest_generator.core.label.stages import topic as topic_module
 from digest_generator.core.types import Entry, Label, Summary, TopicType
 from digest_generator.shared.transformers.types import DeviceType, ModelConfig
 
@@ -156,18 +157,33 @@ class TestTopicClassifier:
             assert isinstance(tag.confidence, float)
 
     def test_processes_multiple_summaries(self, classifier, sample_summary):
-        """Should process each summary independently."""
+        """Multiple summaries are scored in one batched forward pass, aligned in order.
+
+        The batched path pairs every text with all label hypotheses in one tensor,
+        so the mock is batch-aware: logits are sized to the input, with the LLM
+        label's entailment row set high for each text (rows are text-major).
+        """
         num_labels = len(TopicType)
         llm_idx = list(TopicType).index(TopicType.LLM)
-        logits = _make_logits(num_labels, [llm_idx])
 
-        classifier.model.return_value = SimpleNamespace(logits=logits)
-        classifier.tokenizer.return_value = {
-            "input_ids": torch.tensor([[1]]),
-            "attention_mask": torch.tensor([[1]]),
-        }
+        def fake_tokenizer(premises, hyps, **kwargs):
+            n = len(premises)
+            return {
+                "input_ids": torch.ones((n, 4), dtype=torch.long),
+                "attention_mask": torch.ones((n, 4), dtype=torch.long),
+            }
 
-        # Create a second summary
+        def fake_model(**inputs):
+            n = inputs["input_ids"].shape[0]
+            logits = torch.full((n, 3), -5.0)
+            for i in range(n):
+                if i % num_labels == llm_idx:
+                    logits[i, 2] = 5.0  # entailment high for the LLM hypothesis
+            return SimpleNamespace(logits=logits)
+
+        classifier.tokenizer.side_effect = fake_tokenizer
+        classifier.model.side_effect = fake_model
+
         entry2 = Entry(
             title="Test",
             url="https://example.com/2",
@@ -180,8 +196,38 @@ class TestTopicClassifier:
 
         results = classifier.classify_summaries([sample_summary, summary2])
         assert len(results) == 2
-        assert len(results[0].topics) >= 1
-        assert len(results[1].topics) >= 1
+        assert TopicType.LLM in {t.value for t in results[0].topics}
+        assert TopicType.LLM in {t.value for t in results[1].topics}
+
+    def test_batches_by_pair_budget(self, classifier, monkeypatch):
+        """topic_batch_size controls how many forward passes N texts take."""
+        num_labels = len(TopicType)
+
+        def fake_tokenizer(premises, hyps, **kwargs):
+            n = len(premises)
+            return {
+                "input_ids": torch.ones((n, 4), dtype=torch.long),
+                "attention_mask": torch.ones((n, 4), dtype=torch.long),
+            }
+
+        def fake_model(**inputs):
+            return SimpleNamespace(logits=torch.full((inputs["input_ids"].shape[0], 3), 1.0))
+
+        classifier.tokenizer.side_effect = fake_tokenizer
+        classifier.model.side_effect = fake_model
+        texts = ["a", "b", "c"]
+
+        # Budget = one text's worth of pairs => one forward pass per text.
+        monkeypatch.setattr(topic_module.settings, "topic_batch_size", num_labels)
+        classifier.model.reset_mock()
+        classifier._infer_batch(texts, threshold=0.5)
+        assert classifier.model.call_count == 3
+
+        # Budget covers all three texts => a single forward pass.
+        monkeypatch.setattr(topic_module.settings, "topic_batch_size", num_labels * 4)
+        classifier.model.reset_mock()
+        classifier._infer_batch(texts, threshold=0.5)
+        assert classifier.model.call_count == 1
 
     def test_empty_summaries(self, classifier):
         assert classifier.classify_summaries([]) == []

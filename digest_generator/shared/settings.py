@@ -110,6 +110,11 @@ class Settings(BaseSettings):
     )
     topic_threshold: float = 0.5
     topic_max_length: int = 512
+    # Max premise-hypothesis pairs per forward pass. Each article is scored
+    # against every TopicType hypothesis, so effective articles-per-pass is
+    # ``topic_batch_size // vocabulary``. Batching cuts the number of forward
+    # passes; raise it on a GPU, lower it if CPU memory is tight.
+    topic_batch_size: int = 128
 
     # -- Writer (digest map-phase section drafts) --
     writer_model: str = "gemma4:31b-cloud"

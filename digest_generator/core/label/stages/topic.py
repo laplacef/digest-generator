@@ -73,14 +73,10 @@ class TopicClassifier:
 
         start_fields = {"feed": feed} if feed else {}
         with log_stage("topic", **start_fields) as span:
-            labels_per_entry: list[list[Label]] = []
-            total_labels = 0
             start = perf_counter()
-            for entry in entries:
-                text = entry.content_head or f"{entry.title}\n{entry.description}"
-                labels = self._infer(text, threshold)
-                labels_per_entry.append(labels)
-                total_labels += len(labels)
+            texts = [e.content_head or f"{e.title}\n{e.description}" for e in entries]
+            labels_per_entry = self._infer_batch(texts, threshold)
+            total_labels = sum(len(labels) for labels in labels_per_entry)
 
             elapsed = perf_counter() - start
             n = len(entries)
@@ -92,6 +88,7 @@ class TopicClassifier:
                 avg_labels_per_entry=avg_labels,
                 threshold=threshold,
                 vocabulary=len(self.labels),
+                batch_size=settings.topic_batch_size,
                 articles_per_sec=articles_per_sec,
             )
             return labels_per_entry
@@ -122,14 +119,13 @@ class TopicClassifier:
 
         start_fields = {"feed": feed} if feed else {}
         with log_stage("topic", **start_fields) as span:
-            labeled: list[Summary] = []
-            total_labels = 0
             start = perf_counter()
-            for s in summaries:
-                text = f"{s.entry.title}\n{s.entry.description}\n{s.summary}"
-                labels = self._infer(text, threshold)
-                total_labels += len(labels)
-                labeled.append(replace(s, topics=labels))
+            texts = [f"{s.entry.title}\n{s.entry.description}\n{s.summary}" for s in summaries]
+            labels_per = self._infer_batch(texts, threshold)
+            labeled = [
+                replace(s, topics=labels) for s, labels in zip(summaries, labels_per, strict=True)
+            ]
+            total_labels = sum(len(labels) for labels in labels_per)
 
             elapsed = perf_counter() - start
             n = len(labeled)
@@ -141,34 +137,60 @@ class TopicClassifier:
                 avg_labels_per_summary=avg_labels,
                 threshold=threshold,
                 vocabulary=len(self.labels),
+                batch_size=settings.topic_batch_size,
                 articles_per_sec=articles_per_sec,
             )
             return labeled
 
     def _infer(self, text: str, threshold: float) -> list[Label]:
-        """Run NLI inference on a single text against every ``TopicType`` hypothesis."""
+        """Run NLI on a single text; thin wrapper over the batched path."""
+        return self._infer_batch([text], threshold)[0]
+
+    def _infer_batch(self, texts: list[str], threshold: float) -> list[list[Label]]:
+        """Score many texts against every ``TopicType`` hypothesis, batched.
+
+        Each text is paired with all label hypotheses; texts are grouped so that
+        at most ``settings.topic_batch_size`` (premise, hypothesis) pairs go
+        through the model per forward pass, cutting the pass count by roughly the
+        texts-per-chunk factor versus one text at a time. A text's full set of
+        hypotheses always stays within one chunk, so the logits reshape back to
+        one row per text is exact. Returns one ``list[Label]`` per input text, in
+        order.
+        """
+        if not texts:
+            return []
         hypotheses = [f"This article is about {lab.replace('-', ' ')}." for lab in self.labels]
+        n_labels = len(hypotheses)
+        texts_per_chunk = max(1, settings.topic_batch_size // n_labels)
 
-        inputs = self.tokenizer(
-            [text] * len(hypotheses),
-            hypotheses,
-            return_tensors="pt",
-            padding=True,
-            truncation=True,
-            max_length=settings.topic_max_length,
-        )
+        results: list[list[Label]] = []
+        for start in range(0, len(texts), texts_per_chunk):
+            chunk = texts[start : start + texts_per_chunk]
+            premises = [t for t in chunk for _ in range(n_labels)]
+            hyps = hypotheses * len(chunk)
 
-        with torch.no_grad():
-            logits = self.model(**inputs).logits
+            inputs = self.tokenizer(
+                premises,
+                hyps,
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+                max_length=settings.topic_max_length,
+            )
 
-        probs = torch.softmax(logits, dim=1)
-        entail = probs[:, 2]
+            with torch.no_grad():
+                logits = self.model(**inputs).logits
 
-        scored = sorted(
-            ((lab, float(score)) for lab, score in zip(self.labels, entail, strict=True)),
-            key=lambda x: x[1],
-            reverse=True,
-        )
-
-        chosen = [(lab, sc) for lab, sc in scored if sc >= threshold] or [scored[0]]
-        return [Label(value=TopicType(lab), confidence=float(sc)) for lab, sc in chosen]
+            # ``entail[i, j]`` is text i's entailment probability for label j.
+            entail = torch.softmax(logits, dim=1)[:, 2].view(len(chunk), n_labels)
+            for row in entail:
+                scored = sorted(
+                    ((lab, float(score)) for lab, score in zip(self.labels, row, strict=True)),
+                    key=lambda x: x[1],
+                    reverse=True,
+                )
+                chosen = [(lab, sc) for lab, sc in scored if sc >= threshold] or [scored[0]]
+                results.append(
+                    [Label(value=TopicType(lab), confidence=float(sc)) for lab, sc in chosen]
+                )
+        return results
