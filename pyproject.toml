@@ -149,7 +149,8 @@ exclude = [
 "digest_generator/api.py" = ["PLC0415"]  # Lazy imports to avoid loading torch/transformers at import time
 "digest_generator/cli.py" = ["PLC0415"]  # Lazy imports for fast --help
 "digest_generator/core/digest/orchestrator.py" = ["PLC0415"]  # Lazy imports to keep stage modules out of the API import chain
-"tests/**/*.py" = ["ARG002"]  # Unused mock arguments from @patch decorators
+"tests/**/*.py" = ["ARG001", "ARG002"]  # Unused mock/callback arguments (@patch decorators, side_effect stubs)
+"tests/core/digest/test_normalize.py" = ["RUF001"]  # test data contains the literal U+00D7 the normalizer rewrites
 
 # Ruff - Formatting
 [tool.ruff.format]

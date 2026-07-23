@@ -15,6 +15,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
+from digest_generator.core.digest.normalize import normalize_output
 from digest_generator.core.digest.types import DigestResult, SectionDraft
 from digest_generator.shared.logging import logger
 
@@ -140,12 +141,16 @@ def build_digest_markdown(result: DigestResult) -> str:
     ``_summary_for_frontmatter``, which cuts on a real sentence boundary when
     one fits under the soft cap.
 
-    The final string is normalized to ASCII whitespace via ``_INVISIBLE_WS_RE``
-    so invisible Unicode separators emitted by upstream LLMs (U+00A0 nbsp,
-    U+2009 thin space, U+202F narrow no-break space, which appear in digest
-    output as ``10,000<U+202F>RPS``) don't reach downstream consumers.
+    The title and body pass through ``normalize_output`` first — the terminal,
+    deterministic mechanical pass (locale, scale/currency abbreviations, leaked
+    notation, entity casing) that runs after the composer and before write. It
+    protects code, links, and URLs, so citation-grade anchor text survives. The
+    invisible-whitespace collapse at the end is retained as belt-and-suspenders
+    over the assembled string, including the frontmatter.
     """
-    escaped_title = result.title.replace('"', '\\"')
+    title = normalize_output(result.title)
+    content = normalize_output(result.content)
+    escaped_title = title.replace('"', '\\"')
 
     # ``slug`` MUST be quoted. Unquoted ``slug: 2026-03-17`` is parsed by YAML
     # as a Date, and Jekyll's UrlDrop#title calls ``.gsub`` on it while building
@@ -161,7 +166,7 @@ def build_digest_markdown(result: DigestResult) -> str:
     ]
 
     summary = ""
-    for block in result.content.strip().split("\n\n"):
+    for block in content.strip().split("\n\n"):
         text = block.strip()
         if text and not text.startswith("#"):
             summary = _summary_for_frontmatter(text).replace('"', '\\"')
@@ -178,7 +183,7 @@ def build_digest_markdown(result: DigestResult) -> str:
     lines.append("---")
     lines.append("")
 
-    return _INVISIBLE_WS_RE.sub(" ", "\n".join(lines) + result.content)
+    return _INVISIBLE_WS_RE.sub(" ", "\n".join(lines) + content)
 
 
 def save_section_drafts(drafts: list[SectionDraft], target_dir: Path) -> None:
