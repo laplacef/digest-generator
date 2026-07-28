@@ -158,10 +158,52 @@ def _maybe_run_digest(
         return False
     digest_filename = build_digest_filename(digest_result)
     digest_path = run_dir / digest_filename
-    digest_path.write_text(build_digest_markdown(digest_result), encoding="utf-8")
+    markdown = build_digest_markdown(digest_result)
+    digest_path.write_text(markdown, encoding="utf-8")
     update_run_meta_digest(run_dir, digest_result.title, digest_filename)
     logger.info("Digest written to {}", digest_path)
+    _lint_written_digest(run_dir, markdown)
     return True
+
+
+def _corpus_urls(run_dir: Path) -> frozenset[str] | None:
+    """Canonicalized fetched URLs for the lint, or ``None`` if unavailable.
+
+    ``None`` disables the membership check rather than failing it: a run whose
+    corpus was pruned or never written would otherwise report every citation
+    as an invented slug, which is worse than not checking at all.
+    """
+    from digest_generator.core.digest.lint import canonical_url
+    from digest_generator.sources.rss.io import fetched_urls
+
+    urls = fetched_urls(run_dir)
+    if not urls:
+        return None
+    return frozenset(canonical_url(u) for u in urls)
+
+
+def _lint_written_digest(run_dir: Path, markdown: str) -> None:
+    """Lint a freshly written digest and log the findings. Never raises.
+
+    Reporting only. A digest costs a full pipeline of LLM calls, so a phrase
+    warning must not discard it, and the markdown is on disk either way. The
+    ``lint`` command is the gating entry point, and it is also the one to
+    re-run after hand-editing a staged digest, since these findings describe
+    the file as generated rather than as published.
+    """
+    from digest_generator.core.digest.lint import format_findings, has_errors, lint_digest
+    from digest_generator.shared.logging import logger
+
+    try:
+        findings = lint_digest(markdown, known_urls=_corpus_urls(run_dir))
+    except Exception as e:  # reporting must never break a completed write
+        logger.warning("Digest lint skipped ({}: {})", type(e).__name__, e)
+        return
+    if not findings:
+        logger.info("Digest lint clean")
+        return
+    log = logger.error if has_errors(findings) else logger.warning
+    log("Digest lint found {} issue(s):\n{}", len(findings), format_findings(findings))
 
 
 def _maybe_render_audio(run_dir: Path, *, enabled: bool) -> None:
@@ -768,6 +810,7 @@ def digest(
         update_run_meta_digest(run_dir, digest_result.title, digest_filename)
 
     logger.info("Digest written to {}", digest_path)
+    _lint_written_digest(run_dir, markdown)
 
     if audio:
         from digest_generator.shared.logging import run_context
@@ -832,6 +875,61 @@ def audio(
             raise typer.Exit(1) from None
         logger.info("Audio written to {}", opus_path)
         typer.echo(str(opus_path))
+
+
+@app.command()
+def lint(
+    digest_file: Annotated[
+        Path,
+        typer.Argument(
+            help="Path to a digest markdown file.",
+            exists=True,
+            dir_okay=False,
+            readable=True,
+        ),
+    ],
+    run_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--run-dir",
+            help="Run directory whose fetched corpus validates link targets.",
+            exists=True,
+            file_okay=False,
+        ),
+    ] = None,
+    strict: Annotated[
+        bool,
+        typer.Option("--strict", help="Exit non-zero on warnings as well as errors."),
+    ] = False,
+) -> None:
+    """Lint a digest markdown file and report structural and prose findings.
+
+    Exits 1 when any error-severity finding is present, so CI and publish
+    scripts can gate on it. Run this against the file you are about to
+    publish: the pipeline lints what it generated, which is a different
+    artifact once a digest has been hand-edited or re-staged.
+
+    Passing --run-dir additionally checks every link target against that run's
+    fetched articles, catching a slug the writer invented or mutated. Without
+    it, only malformed targets are flagged, since there is nothing to compare
+    against.
+    """
+    from digest_generator.core.digest.lint import format_findings, has_errors, lint_digest
+
+    markdown = digest_file.read_text(encoding="utf-8")
+    known_urls = _corpus_urls(run_dir) if run_dir is not None else None
+    if run_dir is not None and known_urls is None:
+        typer.echo(f"Warning: no fetched corpus under {run_dir}; skipping link-target check.")
+
+    findings = lint_digest(markdown, known_urls=known_urls)
+    typer.echo(format_findings(findings))
+    if not findings:
+        return
+
+    errors = sum(1 for f in findings if f.severity == "error")
+    typer.echo(f"\n{len(findings)} finding(s), {errors} error(s).")
+    if has_errors(findings) or strict:
+        raise typer.Exit(1)
 
 
 @app.command()

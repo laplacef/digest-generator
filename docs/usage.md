@@ -185,6 +185,30 @@ The `.opus` path is printed on stdout. The command exits non-zero if the run dir
 
 `run --audio` and `digest --audio` chain this step automatically after a successful digest. With `run --audio`, an audio failure is logged but does not fail the run, since the digest is the primary output. Standalone `audio` and `digest --audio` exit non-zero on failure, since audio is what was explicitly requested.
 
+### `lint <digest_file>`: Check a Digest Before Publishing
+
+Runs deterministic structural, link, and prose checks over a digest markdown file. Every digest write already logs these findings automatically; this command is what you run against the file you are actually about to publish, which is a different artifact as soon as a digest has been hand-edited or re-staged.
+
+```bash
+# Structural and prose checks only
+digest-generator lint output/2026-03-15-143022-a3f1/2026-03-15.md
+
+# Also verify every link target against that run's fetched articles
+digest-generator lint _digests/2026-03-15.md --run-dir output/2026-03-15-143022-a3f1
+```
+
+| Option / Argument | Description | Default |
+|-----------------|-------------|---------|
+| `DIGEST_FILE` | Path to the digest markdown to check (positional) | required |
+| `--run-dir` | Run directory whose fetched corpus validates link targets | none |
+| `--strict` | Exit non-zero on warnings as well as errors | off |
+
+Findings print as `L<line>:<severity>:<category>  <message>`. The command exits 1 when any `error`-severity finding is present, so it can gate a publish script or CI job.
+
+Passing `--run-dir` enables the link-target membership check, which catches a citation whose slug the writer invented or mutated — the failure that produces a dead link in published output while looking entirely plausible in review. Comparison ignores differences that cannot change which article is addressed (`www.`, trailing slash, fragment, `utm_*` tracking parameters), so a clean citation still matches a feed-tagged corpus URL. Without `--run-dir` there is nothing to compare against, so only malformed targets are reported.
+
+A destination containing unquoted whitespace is always an error, with or without a corpus: the space terminates the link at render time, so the citation publishes as literal bracket text rather than a link.
+
 ### `feeds`: List Configured Feeds
 
 Lists the feeds resolved from your `feeds.yaml`, grouped by content type.

@@ -86,6 +86,7 @@ digest-generator run --no-digest      # corpus build only (skip digest generatio
 digest-generator run --audio          # full pipeline + Piper TTS rendition
 digest-generator digest <run_dir>     # regenerate the digest from an existing run directory
 digest-generator audio <run_dir>      # render audio for an existing digest (no LLM cost)
+digest-generator lint <digest.md>     # check a digest before publishing (exits 1 on errors)
 digest-generator feeds                # list available feeds
 ```
 
