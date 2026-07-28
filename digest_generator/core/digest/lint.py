@@ -61,6 +61,7 @@ _TRACKING_PARAM_RE = re.compile(r"(?i)^(utm_[a-z_]+|fbclid|gclid|mc_cid|mc_eid|r
 _RESIDUE_CHECKS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("percent-with-space", re.compile(r"\d\s+%")),
     ("scale-abbreviation", re.compile(r"\d\s?(?:bn|trn|tn|mn)\b")),
+    ("scale-letter", re.compile(r"[$£€¥]\d+(?:\.\d+)?\s?[MBT]\b")),
     ("thousands-suffix", re.compile(r"(?:\b\d+(?:\.\d+)?\s+k\b|[$£€¥]\d+(?:\.\d+)?k\b)")),
     ("space-grouped-thousands", re.compile(r"\b\d{1,3}(?: \d{3})+\b")),
     ("latex-span", re.compile(r"\$[A-Za-z\\][^$]{0,60}?[=\\][^$]*\$")),

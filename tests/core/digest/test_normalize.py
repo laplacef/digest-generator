@@ -43,6 +43,11 @@ class TestScaleAndCurrency:
             ("$1.5k each", "$1,500 each"),
             ("handles 430 000 requests", "handles 430,000 requests"),
             ("over 1 234 567 rows", "over 1,234,567 rows"),
+            ("courting $100 M", "courting $100 million"),
+            ("a $1.2 B valuation", "a $1.2 billion valuation"),
+            ("hit $10.3B", "hit $10.3 billion"),
+            ("€5 T market", "€5 trillion market"),
+            ("a $430 K seed", "a $430,000 seed"),  # capital K expands, never "thousand"
         ],
     )
     def test_transforms(self, src: str, want: str) -> None:
@@ -55,6 +60,9 @@ class TestScaleAndCurrency:
             "the 4K display",  # resolution, not 4,000
             "an 8K monitor",
             "5m of cable",  # bare m left alone (could be meters)
+            "Plan B shipped",  # capital scale letters need a currency prefix
+            "class B shares rose",
+            "reached 100 M users",  # no currency, so not a money amount
         ],
     )
     def test_untouched(self, src: str) -> None:

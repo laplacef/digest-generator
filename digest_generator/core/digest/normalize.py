@@ -79,13 +79,24 @@ _SPACE_THOUSANDS_RE = re.compile(r"\b(\d{1,3}(?: \d{3})+)\b")
 # display resolutions ("4K", "8K") and product names. The space or the currency
 # prefix is the disambiguating "thousand" signal.
 _K_SPACED_RE = re.compile(r"\b(\d+(?:\.\d+)?)\s+k\b")
-_K_CURRENCY_RE = re.compile(r"([$£€¥])(\d+(?:\.\d+)?)k\b")
+_K_CURRENCY_RE = re.compile(r"([$£€¥])(\d+(?:\.\d+)?)\s?[kK]\b")
 
 # Scale suffixes that spell out rather than expand digits (``$9.36bn`` ->
 # ``$9.36 billion``). ``bn``/``tn``/``trn``/``mn`` are unit-unambiguous; bare
 # ``m`` is left alone ("5m" could be meters or million).
 _SCALE_WORDS = {"bn": "billion", "tn": "trillion", "trn": "trillion", "mn": "million"}
 _SCALE_RE = re.compile(r"(\d)\s?(bn|trn|tn|mn)\b")
+
+# Capital scale letters on a money amount (``$100 M`` -> ``$100 million``,
+# ``$1.2B`` -> ``$1.2 billion``). The currency prefix is the whole
+# disambiguator: a bare capital after a number is far too common to touch
+# ("Plan B", "class B shares", "Category 5"), so only an amount qualifies.
+# ``K`` is absent here on purpose — ``_K_CURRENCY_RE`` already expands it to
+# comma-grouped digits, and two rules spelling the same suffix differently
+# would be worse than either. Matters beyond house style: the audio narrator
+# reads these aloud, and "one hundred M" is not a number.
+_SCALE_LETTERS = {"M": "million", "B": "billion", "T": "trillion"}
+_SCALE_CURRENCY_RE = re.compile(r"([$£€¥]\d+(?:\.\d+)?)\s?([MBT])\b")
 
 # Inline LaTeX math leaking into prose (``$N=200$``, ``$k=5$``, ``$\alpha$``).
 # Conservative: the span must start with a letter or backslash (so currency
@@ -235,6 +246,7 @@ def _apply_transforms(text: str) -> str:
     text = _K_CURRENCY_RE.sub(lambda m: f"{m.group(1)}{_expand_k(m.group(2))}", text)
     text = _K_SPACED_RE.sub(lambda m: _expand_k(m.group(1)), text)
     text = _SCALE_RE.sub(lambda m: f"{m.group(1)} {_SCALE_WORDS[m.group(2)]}", text)
+    text = _SCALE_CURRENCY_RE.sub(lambda m: f"{m.group(1)} {_SCALE_LETTERS[m.group(2)]}", text)
     text = _LATEX_RE.sub(
         lambda m: m.group(1) if ("=" in m.group(1) or "\\" in m.group(1)) else m.group(0),
         text,
