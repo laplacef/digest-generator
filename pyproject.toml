@@ -12,7 +12,7 @@ packages = ["digest_generator"]
 
 [project]
 name = "digest-generator"
-version = "0.1.0"
+version = "0.2.0"
 description = "Generates weekly digests from RSS feeds using local LLMs and topic classification."
 readme = "README.md"
 requires-python = ">=3.13"
