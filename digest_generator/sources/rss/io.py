@@ -115,6 +115,40 @@ def iter_fetched(
         yield content_type, json_path.stem, entries
 
 
+def fetched_urls(run_dir: Path) -> set[str]:
+    """Return every article URL in the run's fetched corpus.
+
+    Deliberately more permissive than ``iter_fetched``, which skips a whole
+    batch whose entries carry no ``content_type``. The consumer is the lint's
+    link-target membership check, where a silently dropped batch would turn
+    every URL it legitimately contributed into a false "invented slug" error.
+    Reading only the ``url`` field keeps the check correct even on a corpus
+    ``iter_fetched`` would treat as partial.
+
+    Returns an empty set when the directory is absent, which callers must read
+    as "no corpus available" rather than "no URL is valid".
+    """
+    root = fetched_dir(run_dir)
+    if not root.exists():
+        return set()
+    urls: set[str] = set()
+    for json_path in sorted(root.glob("*.json")):
+        try:
+            with json_path.open(encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.warning("fetched_urls: skipping {} ({}: {})", json_path, type(exc).__name__, exc)
+            continue
+        if not isinstance(data, list):
+            continue
+        urls.update(
+            item["url"]
+            for item in data
+            if isinstance(item, dict) and isinstance(item.get("url"), str)
+        )
+    return urls
+
+
 def _serialize(entry: Entry) -> dict[str, Any]:
     """Convert one ``Entry`` to JSON-safe shape."""
     payload: dict[str, Any] = {

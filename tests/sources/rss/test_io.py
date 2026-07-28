@@ -8,6 +8,7 @@ import pytest
 from digest_generator.core.types import Entry
 from digest_generator.sources.rss.io import (
     fetched_path,
+    fetched_urls,
     iter_fetched,
     load_entries,
     save_entries,
@@ -117,6 +118,39 @@ class TestLoadEntries:
         target.write_text(json.dumps({"oops": "not a list"}))
         with pytest.raises(ValueError, match="not a JSON list"):
             load_entries(tmp_path, "broken")
+
+
+class TestFetchedUrls:
+    def test_missing_dir_returns_empty_set(self, tmp_path):
+        assert fetched_urls(tmp_path) == set()
+
+    def test_collects_urls_across_feeds(self, tmp_path, now):
+        save_entries(tmp_path, "feed-a", [_entry(now, url="https://example.com/1")])
+        save_entries(tmp_path, "feed-b", [_entry(now, url="https://example.com/2")])
+        assert fetched_urls(tmp_path) == {"https://example.com/1", "https://example.com/2"}
+
+    def test_includes_batches_iter_fetched_would_skip(self, tmp_path, now):
+        """A batch with no content_type still contributes its URLs.
+
+        iter_fetched drops such a batch entirely; for the lint's membership
+        check that would turn each of its cited URLs into a false positive.
+        """
+        save_entries(tmp_path, "typed", [_entry(now, url="https://example.com/typed")])
+        untyped = fetched_path(tmp_path, "untyped")
+        untyped.write_text(json.dumps([{"url": "https://example.com/untyped"}]))
+        assert "https://example.com/untyped" in fetched_urls(tmp_path)
+        assert {feed for _, feed, _ in iter_fetched(tmp_path)} == {"typed"}
+
+    def test_skips_malformed_json_without_raising(self, tmp_path, now):
+        save_entries(tmp_path, "good", [_entry(now, url="https://example.com/good")])
+        fetched_path(tmp_path, "bad").write_text("{{{ not json")
+        assert fetched_urls(tmp_path) == {"https://example.com/good"}
+
+    def test_ignores_entries_without_a_string_url(self, tmp_path):
+        path = fetched_path(tmp_path, "mixed")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps([{"url": "https://example.com/ok"}, {"url": None}, {}]))
+        assert fetched_urls(tmp_path) == {"https://example.com/ok"}
 
 
 class TestIterFetched:

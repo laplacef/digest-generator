@@ -5,9 +5,14 @@ from __future__ import annotations
 from digest_generator.core.digest.lint import (
     ERROR,
     WARNING,
+    canonical_url,
     format_findings,
     has_errors,
     lint_digest,
+)
+
+KNOWN_URLS = frozenset(
+    canonical_url(u) for u in ("https://x.io/r", "https://x.io/p", "https://x.io/f")
 )
 
 CLEAN_DIGEST = """---
@@ -46,6 +51,77 @@ class TestCleanDigest:
 
     def test_no_errors_helper(self) -> None:
         assert has_errors(lint_digest(CLEAN_DIGEST)) is False
+
+
+class TestLinkTargets:
+    """Both defects here shipped in a real digest and survived every LLM stage."""
+
+    def test_clean_digest_has_no_link_findings(self) -> None:
+        findings = lint_digest(CLEAN_DIGEST, known_urls=KNOWN_URLS)
+        assert findings == [], format_findings(findings)
+
+    def test_unquoted_whitespace_in_target_is_an_error(self) -> None:
+        md = CLEAN_DIGEST.replace("https://x.io/p", "https://x.io/p Newly")
+        findings = [f for f in lint_digest(md) if f.category == "link-target-malformed"]
+        assert len(findings) == 1
+        assert findings[0].severity == ERROR
+
+    def test_malformed_target_needs_no_corpus(self) -> None:
+        """The whitespace case is wrong on its own terms, so it gates without one."""
+        md = CLEAN_DIGEST.replace("https://x.io/p", "https://x.io/p Newly")
+        assert has_errors(lint_digest(md, known_urls=None)) is True
+
+    def test_commonmark_quoted_title_is_well_formed(self) -> None:
+        md = CLEAN_DIGEST.replace("(https://x.io/p)", '(https://x.io/p "A Title")')
+        findings = [f for f in lint_digest(md) if f.category == "link-target-malformed"]
+        assert findings == []
+
+    def test_mutated_slug_is_caught_against_the_corpus(self) -> None:
+        md = CLEAN_DIGEST.replace("https://x.io/p", "https://x.io/p-for-some-coders")
+        findings = [
+            f for f in lint_digest(md, known_urls=KNOWN_URLS) if f.category == "link-target-unknown"
+        ]
+        assert len(findings) == 1
+        assert findings[0].severity == ERROR
+
+    def test_no_corpus_means_no_membership_check(self) -> None:
+        md = CLEAN_DIGEST.replace("https://x.io/p", "https://x.io/totally-invented")
+        assert [f for f in lint_digest(md) if f.category == "link-target-unknown"] == []
+
+    def test_trailing_slash_and_fragment_do_not_false_positive(self) -> None:
+        md = CLEAN_DIGEST.replace("https://x.io/p", "https://X.io/p/#section")
+        findings = [
+            f for f in lint_digest(md, known_urls=KNOWN_URLS) if f.category == "link-target-unknown"
+        ]
+        assert findings == []
+
+    def test_relative_targets_are_not_membership_checked(self) -> None:
+        md = CLEAN_DIGEST.replace("https://x.io/p", "/local/page")
+        findings = [
+            f for f in lint_digest(md, known_urls=KNOWN_URLS) if f.category == "link-target-unknown"
+        ]
+        assert findings == []
+
+
+class TestCanonicalUrl:
+    def test_folds_host_case_trailing_slash_and_fragment(self) -> None:
+        assert canonical_url("HTTPS://Example.COM/Path/") == "https://example.com/Path"
+        assert canonical_url("https://example.com/p#frag") == "https://example.com/p"
+
+    def test_folds_www_prefix(self) -> None:
+        assert canonical_url("https://www.x.io/a") == canonical_url("https://x.io/a")
+
+    def test_drops_feed_tracking_parameters(self) -> None:
+        """RSS tags the canonical link, so the corpus and a clean citation must match."""
+        tagged = "https://x.io/a/?utm_source=rss&utm_medium=rss&utm_campaign=a"
+        assert canonical_url(tagged) == canonical_url("https://x.io/a/")
+
+    def test_keeps_content_selecting_parameters(self) -> None:
+        assert canonical_url("https://x.io/a?id=7&utm_source=rss") == "https://x.io/a?id=7"
+
+    def test_path_case_is_significant(self) -> None:
+        """A changed path is the defect being detected, so it must not fold."""
+        assert canonical_url("https://x.io/Slug") != canonical_url("https://x.io/slug")
 
 
 class TestStructuralErrors:
