@@ -254,7 +254,7 @@ filter = Filter.resolve(days_back=3)
 run_dir = Path("output/myrun")
 run_dir.mkdir(parents=True, exist_ok=True)
 
-run(feeds, filter, run_dir=run_dir, with_digest=True)   # with_digest=False stops at the corpus
+run(feeds, filter, run_dir=run_dir, with_digest=True)  # with_digest=False stops at the corpus
 ```
 
 ### Per-stage invocation
@@ -279,14 +279,14 @@ from datetime import UTC, datetime
 from digest_generator.api import resolve_feeds
 from digest_generator.core.types import Filter
 
-feeds = resolve_feeds(content_types=["ai", "security"])   # by content type
-feeds = resolve_feeds(feed_names=["openai-news", "github-blog"])   # by name
+feeds = resolve_feeds(content_types=["ai", "security"])  # by content type
+feeds = resolve_feeds(feed_names=["openai-news", "github-blog"])  # by name
 
 filter = Filter.resolve(
     since=datetime(2026, 3, 1, tzinfo=UTC),
     until=datetime(2026, 3, 15, tzinfo=UTC),
 )
-filter = Filter.resolve(days_back=7, limit=5)   # with a per-feed entry limit
+filter = Filter.resolve(days_back=7, limit=5)  # with a per-feed entry limit
 ```
 
 ### Standalone digest
