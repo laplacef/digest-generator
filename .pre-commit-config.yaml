@@ -42,13 +42,15 @@ repos:
         name: Ruff linter
         entry: uv run --no-sync ruff check --fix
         language: system
-        types_or: [python, pyi]
+        # toml lets ruff validate pyproject.toml metadata (RUF200)
+        types_or: [python, pyi, toml]
         require_serial: true
       - id: ruff-format
         name: Ruff formatter
         entry: uv run --no-sync ruff format
         language: system
-        types_or: [python, pyi]
+        # markdown covers Python code blocks in the docs
+        types_or: [python, pyi, markdown]
         require_serial: true
       - id: mypy
         name: Type checking with mypy
