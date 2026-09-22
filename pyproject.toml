@@ -18,7 +18,7 @@ readme = "README.md"
 requires-python = ">=3.13"
 license = "Apache-2.0"
 license-files = ["LICENSE.md", "NOTICE.md"]
-authors = [{ name = "Francisco Laplace", url = "https://laplacef.me" }]
+authors = [{ name = "Francisco Laplace" }]
 keywords = [
     "rss",
     "digest",
