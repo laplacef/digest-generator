@@ -61,6 +61,7 @@ Homepage = "https://github.com/laplacef/digest-generator"
 Repository = "https://github.com/laplacef/digest-generator"
 Issues = "https://github.com/laplacef/digest-generator/issues"
 Changelog = "https://github.com/laplacef/digest-generator/blob/main/CHANGELOG.md"
+Author = "https://laplacef.me"
 
 [project.scripts]
 digest-generator = "digest_generator.cli:app"
