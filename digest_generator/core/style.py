@@ -241,6 +241,16 @@ BRAND_LED_VERBS: tuple[str, ...] = (
     "Rolls Out",
 )
 
+# Trend verbs that stand in for a concrete action anywhere in a title
+# ("Zero-Code Agents Reshape Engineering Workflows"). Only verbs observed
+# leaking past the title prompt are listed. "Drive" and "Transform" stay
+# prompt-only because both are also nouns ("Google Drive", "Fourier Transform")
+# and a match here is a lint error, not a warning.
+GENERIC_TITLE_VERBS: tuple[str, ...] = (
+    "Reshape",
+    "Accelerate",
+)
+
 # Forbidden title shapes as ``(regex, reason)`` pairs. Single source of truth
 # for both the framer's retry-with-feedback guard (``framer.py``) and the
 # golden-output lint (``digest.lint``), so a rule promoted from prompt-only to
@@ -257,6 +267,13 @@ TITLE_PATTERNS: tuple[tuple[str, str], ...] = (
             "leads with a brand/product name plus a generic announcement verb "
             "(e.g. 'OpenAI Releases', 'Claude Mythos Finds') — reads like vendor "
             "marketing, not editorial framing"
+        ),
+    ),
+    (
+        r"\b(?:" + "|".join(GENERIC_TITLE_VERBS) + r")s?\b",
+        (
+            "uses a generic trend verb (e.g. 'Reshape', 'Accelerate') where a "
+            "concrete verb tied to the week's events belongs"
         ),
     ),
 )

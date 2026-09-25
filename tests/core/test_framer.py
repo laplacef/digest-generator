@@ -249,6 +249,30 @@ class TestTitleIssues:
         # "Zero-Day Discovery Collides with Agentic Production Risks".
         assert _title_issues("Zero-Day Discovery Collides with Agentic Production Risks") == []
 
+    @pytest.mark.parametrize(
+        "title",
+        [
+            "Zero-Code Agents Reshape Engineering Workflows",
+            "Enterprise Agents Accelerate as Autonomous Risks Spike",
+            "Funding Reshapes the Agent Market",
+        ],
+    )
+    def test_detects_generic_trend_verb(self, title):
+        issues = _title_issues(title)
+        assert len(issues) == 1
+        assert "generic trend verb" in issues[0]
+
+    @pytest.mark.parametrize(
+        "title",
+        [
+            "Google Drive Outage Spreads as Sync Fails",
+            "Acceleration Gains Ground in the Kernel Scheduler",
+            "Reshaped Budgets Meet a Widening Trust Deficit",
+        ],
+    )
+    def test_generic_verb_ignores_nouns_and_other_forms(self, title):
+        assert _title_issues(title) == []
+
 
 class TestBuildRetryFeedback:
     def test_includes_previous_attempt_verbatim(self):
