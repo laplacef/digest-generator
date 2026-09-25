@@ -137,6 +137,19 @@ ABSTRACT_INFORMATION_VERBS: list[ForbiddenPhrase] = [
     ForbiddenPhrase('"dominate," "dominated"'),
     ForbiddenPhrase('"manifest," "manifested"'),
     ForbiddenPhrase('"reveal" (as in "X reveals the trend of Y")'),
+    # "utilization" is a real metric (GPU utilization), so the pattern stops at
+    # the verb forms. British "-ise" spellings are matched too.
+    ForbiddenPhrase(
+        '"utilize," "utilizes," "utilized," "utilizing" (write "use")',
+        pattern=r"(?i)\butili[sz](?:e|es|ed|ing)\b",
+    ),
+    # The noun ("bargaining leverage") and "leveraged buyout" are legitimate,
+    # so only the unambiguous verb forms carry a lint pattern.
+    ForbiddenPhrase(
+        '"leverage," "leverages," "leveraging" as a verb (write "use" or name the'
+        ' mechanism; the noun "leverage" and "leveraged buyout" pass)',
+        pattern=r"(?i)\bleverag(?:es|ing)\b",
+    ),
 ]
 
 STAGE_DIRECTION_CLICHES: list[ForbiddenPhrase] = [

@@ -108,6 +108,11 @@ class TestCatalogueContents:
         displays = [p.display for p in ABSTRACT_INFORMATION_VERBS]
         assert any("underscore" in d for d in displays)
 
+    def test_utilize_and_leverage_in_abstract_verbs(self):
+        displays = [p.display for p in ABSTRACT_INFORMATION_VERBS]
+        assert any('"utilize,"' in d for d in displays)
+        assert any('"leverage,"' in d for d in displays)
+
     def test_meanwhile_in_generic_transitions(self):
         displays = [p.display for p in GENERIC_TRANSITION_OPENERS]
         assert any("Meanwhile" in d for d in displays)

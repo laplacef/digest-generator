@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from digest_generator.core.digest.lint import (
     ERROR,
     WARNING,
@@ -190,6 +192,22 @@ class TestPhraseChecks:
         md = CLEAN_DIGEST.replace("Adoption accelerated,", "This week saw adoption accelerate,")
         cats = _categories(md)
         assert "phrase-hollow_week_openers" in cats
+
+    @pytest.mark.parametrize(
+        "phrase",
+        ["Teams utilize agents", "utilizing agents", "utilised agents", "leveraging agents"],
+    )
+    def test_abstract_verb_forms_flagged(self, phrase: str) -> None:
+        md = CLEAN_DIGEST.replace("Providers shipped updates,", f"{phrase},")
+        assert "phrase-abstract_information_verbs" in _categories(md)
+
+    @pytest.mark.parametrize(
+        "phrase",
+        ["GPU utilization rose", "bargaining leverage grew", "a leveraged buyout closed"],
+    )
+    def test_legitimate_nouns_not_flagged(self, phrase: str) -> None:
+        md = CLEAN_DIGEST.replace("Providers shipped updates,", f"{phrase},")
+        assert "phrase-abstract_information_verbs" not in _categories(md)
 
     def test_phrases_are_warnings(self) -> None:
         md = CLEAN_DIGEST.replace(
