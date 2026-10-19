@@ -1,18 +1,16 @@
-"""RSS feed configuration: discovery and loading from ``feeds.yaml``.
+"""RSS feed configuration: resolving and loading ``feeds.yaml``.
 
 Feeds and categories are not hardcoded in the package. The user supplies a
 ``feeds.yaml`` (see ``feeds.example.yaml`` for the schema) with a
 ``categories:`` block (the digest sections, in order) and a ``feeds:`` block.
-This module discovers that file across a fixed search path and validates it
-into a ``CategorySet`` plus a ``list[Feed]``.
+This module resolves that one file and validates it into a ``CategorySet``
+plus a ``list[Feed]``.
 
-Search order (first existing file wins):
-
-1. An explicit feeds file (``--feeds`` / ``FEEDS_FILE``).
-2. ``<config-dir>/feeds.yaml`` where the config dir comes from
-   ``--config`` / ``DIGEST_CONFIG``.
-3. ``./digest-generator/feeds.yaml`` (project-local).
-4. ``~/.config/digest-generator/feeds.yaml`` (user-level).
+The file is the explicit feeds file (``--feeds`` / ``FEEDS_FILE``) when one is
+given, else ``<config dir>/feeds.yaml``, where the config dir is ``--config`` /
+``DIGEST_CONFIG`` or ``~/.config/digest-generator``. There is no search: the
+working directory is never consulted, and a selected file that does not exist
+is an error rather than a cue to look elsewhere.
 """
 
 from __future__ import annotations
@@ -29,8 +27,6 @@ from digest_generator.sources.rss.types import Feed
 
 _CONFIG_FILENAME = "feeds.yaml"
 _EXAMPLE_FILENAME = "feeds.example.yaml"
-_PROJECT_DIR = "digest-generator"
-_USER_CONFIG_DIR = Path.home() / ".config" / "digest-generator"
 
 
 class FeedsConfigError(ValueError):
@@ -69,34 +65,21 @@ class _FeedsDoc(BaseModel):
     feeds: list[_FeedEntry] = Field(min_length=1)
 
 
-def candidate_paths(
+def resolve_feeds_path(
     feeds_file: str | Path | None = None,
     config_dir: str | Path | None = None,
-) -> list[Path]:
-    """Return the ordered feeds-file search path for the given overrides.
+) -> Path:
+    """Return the ``feeds.yaml`` path the overrides select, whether or not it exists.
 
-    Includes every candidate regardless of existence; callers pick the
-    first one that exists.
+    ``feeds_file`` wins, then ``<config_dir>/feeds.yaml``. Unset arguments fall
+    back to ``settings.feeds_file`` and ``settings.config_dir``.
     """
-    paths: list[Path] = []
+    feeds_file = feeds_file or settings.feeds_file
     if feeds_file:
-        paths.append(Path(feeds_file).expanduser())
+        return Path(feeds_file).expanduser()
     if config_dir:
-        paths.append(Path(config_dir).expanduser() / _CONFIG_FILENAME)
-    paths.append(Path.cwd() / _PROJECT_DIR / _CONFIG_FILENAME)
-    paths.append(_USER_CONFIG_DIR / _CONFIG_FILENAME)
-    return paths
-
-
-def discover_feeds_file(
-    feeds_file: str | Path | None = None,
-    config_dir: str | Path | None = None,
-) -> Path | None:
-    """Return the first existing feeds file in the search path, or ``None``."""
-    for path in candidate_paths(feeds_file, config_dir):
-        if path.is_file():
-            return path
-    return None
+        return Path(config_dir).expanduser() / _CONFIG_FILENAME
+    return settings.config_dir / _CONFIG_FILENAME
 
 
 def load_config(path: Path) -> tuple[CategorySet, list[Feed]]:
@@ -179,49 +162,40 @@ def load_categories(path: Path) -> CategorySet:
     return load_config(path)[0]
 
 
-def _resolve_config_path(
-    feeds_file: str | Path | None,
-    config_dir: str | Path | None,
-) -> Path:
-    """Discover the active feeds.yaml or raise an actionable not-found error."""
-    feeds_file = feeds_file or settings.feeds_file or None
-    config_dir = config_dir or settings.digest_config or None
+def load_configured(
+    feeds_file: str | Path | None = None,
+    config_dir: str | Path | None = None,
+) -> tuple[CategorySet, list[Feed]]:
+    """Resolve and load the active ``feeds.yaml``. See ``resolve_feeds_path``.
 
-    path = discover_feeds_file(feeds_file, config_dir)
-    if path is None:
-        searched = "\n  ".join(str(p) for p in candidate_paths(feeds_file, config_dir))
+    Raises:
+        FeedsConfigError: If the resolved file does not exist or is invalid.
+    """
+    path = resolve_feeds_path(feeds_file, config_dir)
+    if not path.is_file():
         msg = (
-            "No feeds.yaml found. Searched:\n  "
-            f"{searched}\n"
+            f"No feeds.yaml found at {path}.\n"
             "Run 'digest-generator init' to create a starter feeds.yaml, "
             "or pass --feeds / --config to point at an existing one."
         )
         raise FeedsConfigError(msg)
-    return path
+    return load_config(path)
 
 
 def load_configured_feeds(
     feeds_file: str | Path | None = None,
     config_dir: str | Path | None = None,
 ) -> list[Feed]:
-    """Discover and load the active feeds configuration.
-
-    Falls back to ``settings.feeds_file`` / ``settings.digest_config`` when
-    the corresponding argument is ``None``, then walks the search path.
-
-    Raises:
-        FeedsConfigError: If no feeds file is found, or the resolved file
-            is invalid.
-    """
-    return load_feeds(_resolve_config_path(feeds_file, config_dir))
+    """Resolve and load the active feeds. See ``load_configured``."""
+    return load_configured(feeds_file, config_dir)[1]
 
 
 def load_configured_categories(
     feeds_file: str | Path | None = None,
     config_dir: str | Path | None = None,
 ) -> CategorySet:
-    """Discover and load the active category set. See ``load_configured_feeds``."""
-    return load_categories(_resolve_config_path(feeds_file, config_dir))
+    """Resolve and load the active category set. See ``load_configured``."""
+    return load_configured(feeds_file, config_dir)[0]
 
 
 def example_feeds_text() -> str:
@@ -245,19 +219,12 @@ def write_starter_feeds(
 ) -> Path:
     """Write a starter ``feeds.yaml`` and return the path written.
 
-    The target is the explicit ``feeds_file``, else ``<config_dir>/feeds.yaml``,
-    else ``~/.config/digest-generator/feeds.yaml``.
+    The target is the file later runs will read: see ``resolve_feeds_path``.
 
     Raises:
         FeedsConfigError: If the target already exists and ``force`` is False.
     """
-    if feeds_file:
-        target = Path(feeds_file).expanduser()
-    elif config_dir:
-        target = Path(config_dir).expanduser() / _CONFIG_FILENAME
-    else:
-        target = _USER_CONFIG_DIR / _CONFIG_FILENAME
-
+    target = resolve_feeds_path(feeds_file, config_dir)
     if target.exists() and not force:
         msg = f"{target} already exists. Pass --force to overwrite it."
         raise FeedsConfigError(msg)

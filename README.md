@@ -1,86 +1,46 @@
 # Digest Generator
 
 [![Python](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
-[![PyTorch](https://img.shields.io/badge/PyTorch-2.10+-red.svg)](https://pytorch.org/)
-[![CUDA](https://img.shields.io/badge/CUDA-13.0+-green.svg)](https://developer.nvidia.com/cuda-toolkit-archive)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/laplacef/digest-generator/blob/main/LICENSE.md)
-
-## Overview
 
 Digest Generator is a Python pipeline that aggregates articles from RSS feeds you define, generates fact-dense per-article summaries via an LLM, classifies them with zero-shot NLI, and produces a Markdown digest via Ollama. Feeds, sections, and prompts are all user-supplied; the tool ships generic baselines so it runs on any topic out of the box.
 
 ## How It Works
 
-```mermaid
-flowchart LR
-    Feeds[("RSS")]:::storage
+A run has two halves that share one run directory:
 
-    subgraph S["run --no-digest"]
-        direction TB
-        Fetch:::compute --> Summarize:::compute --> Classify:::compute
-    end
+1. **Corpus.** Fetch every feed, then summarize each article with an LLM and classify its topics with BART-MNLI, in parallel.
+2. **Digest.** Cluster articles into stories, draft each section, edit it, write the title and intro, pick what to watch, and compose `<date>.md`.
 
-    JSON[("JSON")]:::storage
+`digest-generator run` does both. `run --no-digest` stops after the corpus, and `digest <run_dir>` turns an existing corpus into a digest. Each stage caches its output, so re-running against the same directory skips finished work. The stage-by-stage view is in [`docs/usage.md`](https://github.com/laplacef/digest-generator/blob/main/docs/usage.md).
 
-    subgraph D["digest"]
-        direction TB
-        Writer:::compute --> Editor:::compute
-        Editor --> Framer:::compute --> Watcher:::compute --> Composer:::compute
-        Editor --> Composer
-        Framer --> Composer
-    end
+## Requirements
 
-    MD[("digest.md")]:::storage
-
-    Feeds --> Fetch
-    Classify --> JSON
-    JSON --> Writer
-    Composer --> MD
-
-    classDef compute fill:#fed7aa,stroke:#9a3412,color:#0f172a
-    classDef storage fill:#e5e7eb,stroke:#374151,color:#0f172a
-```
-
-`digest-generator run` does both halves end to end, writing the JSON corpus and the final Markdown digest into the same run directory. You can also run the halves separately: `run --no-digest` stops after building the corpus, and `digest <run_dir>` turns an existing corpus into a digest.
-
-For full usage details, see [`docs/usage.md`](https://github.com/laplacef/digest-generator/blob/main/docs/usage.md).
+- **Python.** Version 3.13 or later.
+- **Ollama.** The summarizer and every digest stage call [Ollama](https://ollama.com). The default models (`gemma4:31b-cloud`, `gpt-oss:120b-cloud`) are Ollama cloud models: set `OLLAMA_API_KEY` to call ollama.com directly, or use a local Ollama signed in to an Ollama account. To stay fully local, pull local models and set the six `*_MODEL` variables listed in [`.env.example`](https://github.com/laplacef/digest-generator/blob/main/.env.example).
+- **HuggingFace token.** `run` and `label` log in to the HuggingFace Hub before the topic classifier loads, so they fail without `HF_TOKEN` ([create a token](https://huggingface.co/settings/tokens)). The classifier model (BART-MNLI, about 1.6 GB) downloads on first use.
+- **Optional extras.** Piper and ffmpeg for audio rendering, and an NVIDIA or Apple Silicon GPU for the classifier. Both are covered in [`docs/setup.md`](https://github.com/laplacef/digest-generator/blob/main/docs/setup.md).
 
 ## Installation
 
 ```bash
-pip install digest-generator          # or: uv tool install digest-generator
+uv tool install digest-generator      # or: pipx install digest-generator
 digest-generator init                 # write a starter feeds.yaml
-# edit ~/.config/digest-generator/feeds.yaml to add your categories and feeds
 ```
 
-`init` creates `~/.config/digest-generator/feeds.yaml` from a starter template. Edit it to define your own sections (`categories:`) and the feeds in each, then run `digest-generator feeds` to check it. The digest stages need a running [Ollama](https://ollama.com); the topic classifier downloads a public model on first use.
+Inside an activated virtual environment, `pip install digest-generator` works too. `init` creates `~/.config/digest-generator/feeds.yaml` from a starter template. Edit it to define your own sections (`categories:`) and the feeds in each, then run `digest-generator feeds` to check it. Put `HF_TOKEN` (and `OLLAMA_API_KEY` for cloud Ollama) in a `.env` file in the directory you run from, or export them in your shell. [`.env.example`](https://github.com/laplacef/digest-generator/blob/main/.env.example) lists every other setting with its default.
 
-Working from a clone instead (for development or audio/GPU extras):
+A small first run keeps the LLM cost low:
 
 ```bash
-git clone https://github.com/laplacef/digest-generator.git
-cd digest-generator
-uv sync --extra dev
+digest-generator run -d 1 --limit 3   # 1 day back, at most 3 articles per feed
 ```
 
-### Configuration
-
-Every setting has a sensible default, so most setups need no environment variables. Override via the environment or a `.env` file in the working directory. The common ones:
-
-| Variable | Purpose | Default |
-|---|---|---|
-| `OLLAMA_HOST` | Ollama endpoint | `http://localhost:11434` |
-| `OLLAMA_API_KEY` | Set to use cloud Ollama instead of local | unset (local) |
-| `HF_TOKEN` | HuggingFace token, only for gated/private models | unset |
-| `DIGEST_CONFIG` | Config directory holding `feeds.yaml` (and optional `prompts/`) | discovery |
-| `PROMPTS_DIR` | Directory of prompt-template overrides | bundled baselines |
-
-Every field in `digest_generator/shared/settings.py` maps to an uppercase env var. Full setup (prerequisites, optional audio rendering, optional GPU acceleration) is in [`docs/setup.md`](https://github.com/laplacef/digest-generator/blob/main/docs/setup.md).
+The digest lands at `output/<run_id>/<date>.md`. To work from a clone instead, follow [`docs/setup.md`](https://github.com/laplacef/digest-generator/blob/main/docs/setup.md), which also covers audio, GPU, and troubleshooting.
 
 ## Usage
 
 ```bash
-digest-generator init                 # write a starter feeds.yaml
 digest-generator run                  # full pipeline (fetch + summarize + classify + digest)
 digest-generator run --no-digest      # corpus build only (skip digest generation)
 digest-generator run --audio          # full pipeline + Piper TTS rendition
@@ -90,14 +50,12 @@ digest-generator lint <digest.md>     # check a digest before publishing (exits 
 digest-generator feeds                # list available feeds
 ```
 
-Each run lands in its own timestamped directory under `output/`, containing the per-stage caches, the final Markdown digest, run metadata, and a log of the run. See [`docs/usage.md`](https://github.com/laplacef/digest-generator/blob/main/docs/usage.md) for the full CLI reference, programmatic API, and output layout.
+See [`docs/usage.md`](https://github.com/laplacef/digest-generator/blob/main/docs/usage.md) for the full CLI reference, caching, the programmatic API, and the output layout.
 
 ## Contributing
 
-Bug reports, feature requests, and pull requests are all welcome. See [CONTRIBUTING.md](https://github.com/laplacef/digest-generator/blob/main/CONTRIBUTING.md) for development setup, coding standards, and the contribution workflow.
-
-This project follows a [Code of Conduct](https://github.com/laplacef/digest-generator/blob/main/CODE_OF_CONDUCT.md). By participating, you are expected to uphold it.
+Bug reports, feature requests, and pull requests are welcome; [CONTRIBUTING.md](https://github.com/laplacef/digest-generator/blob/main/CONTRIBUTING.md) covers development setup and the workflow, and participation follows the [Code of Conduct](https://github.com/laplacef/digest-generator/blob/main/CODE_OF_CONDUCT.md).
 
 ## License
 
-This project is licensed under the [Apache License 2.0](https://github.com/laplacef/digest-generator/blob/main/LICENSE.md). You are free to use, modify, and distribute this project, provided you include proper attribution. See the [NOTICE](https://github.com/laplacef/digest-generator/blob/main/NOTICE.md) file for details.
+This project is licensed under the [Apache License 2.0](https://github.com/laplacef/digest-generator/blob/main/LICENSE.md). You are free to use, modify, and distribute this project, provided you keep the license and the [NOTICE](https://github.com/laplacef/digest-generator/blob/main/NOTICE.md) file with any redistribution.

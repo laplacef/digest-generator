@@ -1,7 +1,8 @@
-"""Tests for digest_generator/sources/rss/config.py: feeds.yaml discovery + loading.
+"""Tests for digest_generator/sources/rss/config.py: feeds.yaml resolution + loading.
 
 Feeds and categories come from a user-supplied feeds.yaml. These tests cover
-the happy path, every validation error, and the discovery search order.
+the happy path, every validation error, and single-path resolution (no search,
+no working-directory lookup, no fallthrough past a missing selected file).
 """
 
 from __future__ import annotations
@@ -10,18 +11,18 @@ from pathlib import Path
 
 import pytest
 
+from digest_generator.shared import settings as settings_module
 from digest_generator.shared.settings import settings
-from digest_generator.sources.rss import config as config_module
 from digest_generator.sources.rss.config import (
     FeedsConfigError,
-    candidate_paths,
-    discover_feeds_file,
     example_feeds_text,
     load_categories,
     load_config,
+    load_configured,
     load_configured_categories,
     load_configured_feeds,
     load_feeds,
+    resolve_feeds_path,
     write_starter_feeds,
 )
 
@@ -54,20 +55,17 @@ def _write(tmp_path, text, name="feeds.yaml"):
 
 
 @pytest.fixture
-def isolated_discovery(tmp_path, monkeypatch):
-    """Cut discovery off from the host environment.
+def user_config_dir(tmp_path, monkeypatch):
+    """Point the user-level config dir and cwd at empty temp locations.
 
-    Points the user-level config dir and cwd at empty temp locations and
-    clears the settings fallbacks so a real
-    ``~/.config/digest-generator/feeds.yaml`` on the host can't make
-    absence tests pass by accident.
+    The autouse ``bundled_prompts`` fixture already clears the settings
+    fallbacks; this also moves cwd so a stray ``./digest-generator/`` can't
+    leak in.
     """
-    monkeypatch.setattr(
-        config_module, "_USER_CONFIG_DIR", tmp_path / "no-home" / "digest-generator"
-    )
+    path = tmp_path / "home" / "digest-generator"
+    monkeypatch.setattr(settings_module, "USER_CONFIG_DIR", path)
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(settings, "feeds_file", None)
-    monkeypatch.setattr(settings, "digest_config", None)
+    return path
 
 
 class TestLoadConfig:
@@ -166,32 +164,28 @@ class TestLoadConfig:
         assert categories.ids == ("ai", "security")
 
 
-class TestDiscovery:
-    """candidate_paths / discover_feeds_file: the search order."""
+class TestResolveFeedsPath:
+    """resolve_feeds_path: one selected file, never a search."""
 
-    def test_explicit_file_first(self, tmp_path):
-        paths = candidate_paths(feeds_file="/explicit/feeds.yaml", config_dir="/cfg")
-        assert paths[0].name == "feeds.yaml"
-        assert str(paths[0]) == "/explicit/feeds.yaml"
-        # config dir comes next, then project-local, then user-level
-        assert paths[1] == Path("/cfg/feeds.yaml")
+    def test_explicit_file_wins(self):
+        path = resolve_feeds_path(feeds_file="/explicit/feeds.yaml", config_dir="/cfg")
+        assert path == Path("/explicit/feeds.yaml")
 
-    def test_user_level_is_last(self, tmp_path):
-        paths = candidate_paths()
-        assert paths[-1].parts[-3:] == (".config", "digest-generator", "feeds.yaml")
+    def test_config_dir(self):
+        assert resolve_feeds_path(config_dir="/cfg") == Path("/cfg/feeds.yaml")
 
-    def test_discover_returns_first_existing(self, tmp_path):
-        existing = _write(tmp_path, _VALID)
-        found = discover_feeds_file(feeds_file=str(existing))
-        assert found == existing
+    def test_settings_fallbacks(self, monkeypatch):
+        monkeypatch.setattr(settings, "digest_config", "/cfg")
+        assert resolve_feeds_path() == Path("/cfg/feeds.yaml")
+        monkeypatch.setattr(settings, "feeds_file", "/env/feeds.yaml")
+        assert resolve_feeds_path() == Path("/env/feeds.yaml")
 
-    def test_discover_returns_none_when_absent(self, tmp_path, isolated_discovery):
-        found = discover_feeds_file(feeds_file=str(tmp_path / "nope.yaml"))
-        assert found is None
+    def test_user_config_dir_by_default(self, user_config_dir):
+        assert resolve_feeds_path() == user_config_dir / "feeds.yaml"
 
 
 class TestLoadConfigured:
-    """load_configured_feeds / load_configured_categories: discovery + load."""
+    """load_configured and its wrappers: resolve + load."""
 
     def test_loads_via_explicit_file(self, tmp_path):
         path = _write(tmp_path, _VALID)
@@ -201,14 +195,40 @@ class TestLoadConfigured:
         path = _write(tmp_path, _VALID)
         assert load_configured_categories(feeds_file=str(path)).ids == ("ai", "security")
 
+    def test_returns_categories_and_feeds(self, tmp_path):
+        categories, feeds = load_configured(feeds_file=str(_write(tmp_path, _VALID)))
+        assert categories.ids == ("ai", "security")
+        assert [f.name for f in feeds] == ["openai-news", "krebs"]
+
     def test_loads_via_config_dir(self, tmp_path):
         _write(tmp_path, _VALID)
         assert len(load_configured_feeds(config_dir=str(tmp_path))) == 2
 
-    def test_not_found_error_suggests_init(self, tmp_path, isolated_discovery):
+    def test_loads_user_config_by_default(self, user_config_dir):
+        user_config_dir.mkdir(parents=True)
+        _write(user_config_dir, _VALID)
+        assert len(load_configured_feeds()) == 2
+
+    def test_not_found_error_names_path_and_suggests_init(self, tmp_path, user_config_dir):
+        absent = tmp_path / "absent.yaml"
         with pytest.raises(FeedsConfigError) as exc:
-            load_configured_feeds(feeds_file=str(tmp_path / "absent.yaml"))
+            load_configured_feeds(feeds_file=str(absent))
+        assert str(absent) in str(exc.value)
         assert "digest-generator init" in str(exc.value)
+
+    def test_missing_explicit_file_does_not_fall_through(self, tmp_path, user_config_dir):
+        # A valid default exists, but the selected file wins even when absent.
+        user_config_dir.mkdir(parents=True)
+        _write(user_config_dir, _VALID)
+        with pytest.raises(FeedsConfigError):
+            load_configured_feeds(feeds_file=str(tmp_path / "typo.yaml"))
+
+    def test_working_directory_ignored(self, tmp_path, user_config_dir):
+        local = tmp_path / "digest-generator"
+        local.mkdir()
+        _write(local, _VALID)
+        with pytest.raises(FeedsConfigError):
+            load_configured_feeds()
 
 
 class TestStarterFeeds:
@@ -233,12 +253,9 @@ class TestStarterFeeds:
         assert written == tmp_path / "feeds.yaml"
         assert written.is_file()
 
-    def test_default_target_is_user_config(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(config_module, "_USER_CONFIG_DIR", tmp_path / "cfg")
-        monkeypatch.setattr(settings, "feeds_file", None)
-        monkeypatch.setattr(settings, "digest_config", None)
+    def test_default_target_is_user_config(self, user_config_dir):
         written = write_starter_feeds()
-        assert written == tmp_path / "cfg" / "feeds.yaml"
+        assert written == user_config_dir / "feeds.yaml"
         assert written.is_file()
 
     def test_no_clobber_without_force(self, tmp_path):

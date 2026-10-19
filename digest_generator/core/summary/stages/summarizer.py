@@ -110,13 +110,18 @@ class ContentSummarizer:
             return summaries
 
     async def summarize_entry(self, entry: Entry) -> Summary:
-        """Summarize one entry; on empty LLM response, fall back to source text.
+        """Summarize one entry; on an empty response or an LLM error, fall back to source text.
 
         Fallback order: ``content_head[:1000]`` if present, else
-        ``description``. Always returns a non-None ``Summary``.
+        ``description``. Always returns a non-None ``Summary``, so one failing
+        article never discards the rest of its feed's summaries.
         """
         user_prompt = self._build_user_prompt(entry)
-        text = (await asyncio.to_thread(self._call_llm, user_prompt)).strip()
+        try:
+            text = (await asyncio.to_thread(self._call_llm, user_prompt)).strip()
+        except Exception as e:
+            logger.warning("summarizer.error entry={!r} {}: {}", entry.title, type(e).__name__, e)
+            text = ""
         if not text:
             text = self._fallback_summary(entry)
             logger.warning("summarizer.fallback entry={!r} chars={}", entry.title, len(text))

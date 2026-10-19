@@ -22,7 +22,7 @@ Please include:
 ## Scope
 
 The following are considered security issues:
-- Credential exposure (e.g., `HF_TOKEN` leakage through logs or output files)
+- Credential exposure (e.g., `HF_TOKEN` or `OLLAMA_API_KEY` leakage through logs or output files)
 - Dependency vulnerabilities in direct dependencies
 - Injection risks via malicious RSS feed content (e.g., crafted HTML parsed by BeautifulSoup)
 - Arbitrary code execution through model loading or deserialization

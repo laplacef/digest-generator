@@ -12,7 +12,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from digest_generator.core.types import Filter
-from digest_generator.sources.rss.fetcher import FeedFetcher, _truncate_at_word_boundary
+from digest_generator.sources.rss.fetcher import (
+    FeedFetcher,
+    _fetch_feed_bytes,
+    _truncate_at_word_boundary,
+)
 from digest_generator.sources.rss.types import Feed
 
 # =============================================================================
@@ -288,22 +292,37 @@ class TestFetchEntries:
     @patch("digest_generator.sources.rss.fetcher.asyncio.to_thread", new_callable=AsyncMock)
     @patch("digest_generator.sources.rss.fetcher.feedparser")
     @patch("digest_generator.sources.rss.fetcher.cloudscraper")
-    async def test_falls_back_to_feedparser_on_scraper_failure(
+    async def test_falls_back_to_direct_fetch_on_scraper_failure(
         self, mock_cloudscraper, mock_feedparser, mock_to_thread, mock_sleep, fetcher, sample_feed
     ):
-        """If cloudscraper fails for the feed URL, falls back to direct feedparser."""
+        """A cloudscraper failure retries through the bounded direct fetch, then parses its bytes."""
         mock_cloudscraper.create_scraper.return_value = MagicMock()
-
-        # First to_thread call (scraper.get) fails, second (feedparser.parse) succeeds
-        mock_to_thread.side_effect = [
-            Exception("Connection error"),
-            SimpleNamespace(entries=[]),  # feedparser fallback
-        ]
+        mock_to_thread.side_effect = [Exception("Connection error"), b"<rss/>"]
+        mock_feedparser.parse.return_value = SimpleNamespace(entries=[])
 
         result = await fetcher.fetch_entries(sample_feed, Filter(days_back=7))
+
         assert result == []
-        # Second to_thread call should be feedparser.parse(feed.url)
-        assert mock_to_thread.call_count == 2
+        fallback_call = mock_to_thread.call_args_list[1]
+        assert fallback_call.args[0] is _fetch_feed_bytes
+        assert fallback_call.args[1] == sample_feed.url
+        mock_feedparser.parse.assert_called_once_with(b"<rss/>")
+
+    @pytest.mark.asyncio
+    @patch("digest_generator.sources.rss.fetcher.asyncio.sleep", new_callable=AsyncMock)
+    @patch("digest_generator.sources.rss.fetcher.asyncio.to_thread", new_callable=AsyncMock)
+    @patch("digest_generator.sources.rss.fetcher.feedparser")
+    @patch("digest_generator.sources.rss.fetcher.cloudscraper")
+    async def test_failed_fallback_yields_empty_feed(
+        self, mock_cloudscraper, mock_feedparser, mock_to_thread, mock_sleep, fetcher, sample_feed
+    ):
+        """When both fetches fail the feed parses as empty instead of raising."""
+        mock_cloudscraper.create_scraper.return_value = MagicMock()
+        mock_to_thread.side_effect = [Exception("Connection error"), TimeoutError("timed out")]
+        mock_feedparser.parse.return_value = SimpleNamespace(entries=[])
+
+        assert await fetcher.fetch_entries(sample_feed, Filter(days_back=7)) == []
+        mock_feedparser.parse.assert_called_once_with(b"")
 
     @pytest.mark.asyncio
     @patch("digest_generator.sources.rss.fetcher.asyncio.sleep", new_callable=AsyncMock)
@@ -472,3 +491,15 @@ class TestFetchEntries:
         since = datetime.now(tz=UTC) - timedelta(days=3)
         result = await fetcher.fetch_entries(sample_feed, Filter(since=since))
         assert result == []
+
+
+class TestFetchFeedBytes:
+    def test_rejects_non_http_schemes(self):
+        with pytest.raises(ValueError, match="Unsupported feed URL scheme"):
+            _fetch_feed_bytes("file:///etc/passwd", timeout=1)
+
+    @patch("digest_generator.sources.rss.fetcher.urllib.request.urlopen")
+    def test_passes_timeout_and_returns_body(self, mock_urlopen):
+        mock_urlopen.return_value.__enter__.return_value.read.return_value = b"<rss/>"
+        assert _fetch_feed_bytes("https://example.com/feed", timeout=7) == b"<rss/>"
+        assert mock_urlopen.call_args.kwargs["timeout"] == 7

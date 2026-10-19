@@ -1,12 +1,14 @@
 # Feeds configuration for digest-generator.
 #
 # `digest-generator init` writes this starter; edit it to define your own
-# sections and feeds. The loader looks for feeds.yaml via --feeds, then
-# DIGEST_CONFIG, then ./digest-generator/, then ~/.config/digest-generator/.
+# sections and feeds. The tool reads exactly one feeds.yaml: --feeds (or
+# FEEDS_FILE) when given, else feeds.yaml inside --config (or DIGEST_CONFIG),
+# else ~/.config/digest-generator/feeds.yaml.
 
 # Categories are the digest's sections, in order. Each has a stable id and a
-# display title. Feeds reference a category by its id. Define your own; the
-# ids below are only examples.
+# display title. Feeds reference a category by its id, and the `-c` filter
+# flag takes these ids. Category ids must be unique. Define your own; the ids
+# below are only examples.
 categories:
   - id: ai
     title: "AI & Machine Learning"
@@ -16,7 +18,8 @@ categories:
     title: "Security"
 
 # Each feed needs three fields:
-#   name      stable id; becomes the fetch cache filename and each entry's origin
+#   name      unique stable id; becomes the fetch cache filename and each
+#             entry's origin
 #   url       the RSS/Atom feed URL
 #   category  one of the category ids defined above
 feeds:

@@ -121,9 +121,12 @@ class DigestFramer:
         retried = _clean_title(
             normalize_typography(self._call_llm(_TITLE_SYSTEM_PROMPT, retry_user_prompt))
         )
+        if not retried:
+            logger.warning("Retried title came back empty; keeping {!r}", title)
+            return title
         if _title_issues(retried):
             logger.warning(
-                "Retried title {!r} still matches forbidden pattern(s) — accepting anyway",
+                "Retried title {!r} still matches forbidden pattern(s), accepting anyway",
                 retried,
             )
         return retried

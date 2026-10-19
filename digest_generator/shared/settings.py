@@ -22,6 +22,11 @@ from pathlib import Path
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Config directory used when DIGEST_CONFIG is unset; `digest-generator init`
+# writes here. Config is never discovered from the working directory, so a run
+# can't pick up feeds or prompts from wherever it happens to be launched.
+USER_CONFIG_DIR = Path.home() / ".config" / "digest-generator"
+
 
 class Settings(BaseSettings):
     """Application-wide configuration with environment variable overrides."""
@@ -67,17 +72,15 @@ class Settings(BaseSettings):
     # Pipeline stages (in execution order)
     # =========================================================================
 
-    # -- Feeds source (RSS feed discovery) --
-    # Explicit path to a feeds.yaml file. When unset, the loader walks the
-    # config-dir / project-local / user-level search path (see
-    # digest_generator.sources.rss.config).
+    # -- Config selection (feeds.yaml and prompt overrides) --
+    # Explicit path to a feeds.yaml file. When unset, the file is
+    # <config dir>/feeds.yaml (see `config_dir` below).
     feeds_file: str | None = None
-    # Config directory holding feeds.yaml (and optional prompts/ overrides).
-    # Maps to DIGEST_CONFIG.
+    # Config directory holding feeds.yaml and optional prompts/ overrides.
+    # Maps to DIGEST_CONFIG; unset means USER_CONFIG_DIR.
     digest_config: str | None = None
-    # Directory of prompt-template overrides (<name>.md). When unset, the
-    # loader checks <DIGEST_CONFIG>/prompts/, then ./digest-generator/prompts/,
-    # then ~/.config/digest-generator/prompts/, else the bundled baselines.
+    # Directory of prompt-template overrides (<name>.md). When unset, it is
+    # <config dir>/prompts/; a template missing there uses the bundled baseline.
     prompts_dir: str | None = None
 
     # -- Fetcher --
@@ -205,6 +208,13 @@ class Settings(BaseSettings):
     # because the primary log artifact is per-run ({run_dir}/run.log).
     log_rotation: str = "20 MB"
     log_retention: int = 5
+
+    @property
+    def config_dir(self) -> Path:
+        """The active config directory: ``DIGEST_CONFIG``, else ``USER_CONFIG_DIR``."""
+        if self.digest_config:
+            return Path(self.digest_config).expanduser()
+        return USER_CONFIG_DIR
 
 
 settings = Settings()
