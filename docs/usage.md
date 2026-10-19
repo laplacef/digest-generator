@@ -347,8 +347,8 @@ output/2026-03-15-143022-a3f1/
 ├── source-fetched/<feed>.json       # raw fetched articles, per feed
 ├── source-summarized/<feed>.json    # per-article summaries, per feed
 ├── source-labeled/<feed>.json       # topic labels, per feed
-├── section-drafts/<section>.md      # writer-stage cache, one per section (slug of the category title)
-├── section-edits/<section>.md       # editorial-stage cache
+├── section-drafts/<n>-<section>.md  # writer-stage cache, one per section, in section order
+├── section-edits/<n>-<section>.md   # editorial-stage cache
 ├── assembly/clusters.json           # story-clustering cache
 ├── assembly/framing.json            # title + intro cache
 ├── assembly/watch.json              # what-to-watch cache

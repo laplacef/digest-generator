@@ -192,44 +192,62 @@ def build_digest_markdown(result: DigestResult) -> str:
     return _INVISIBLE_WS_RE.sub(" ", "\n".join(lines) + content)
 
 
-def save_section_drafts(drafts: list[SectionDraft], target_dir: Path) -> None:
-    """Persist section drafts as ``<slug>.md`` files for per-stage caching.
+_SECTION_HEADER_RE = re.compile(r"<!-- section: (\{.*\}) -->")
+_LEGACY_SECTION_HEADER_RE = re.compile(r"<!-- articles: (\d+) -->")
 
-    Each file prepends an HTML comment with the article count so the draft
-    round-trips with enough metadata to rebuild the ``SectionDraft``. The H2
-    heading in the prose carries the section name.
+
+def save_section_drafts(drafts: list[SectionDraft], target_dir: Path) -> None:
+    """Persist section drafts as ``<index>-<slug>.md`` files for per-stage caching.
+
+    The zero-padded index keeps the drafts' order (category order) through a
+    sorted reload and keeps two long titles that share a 40-character slug
+    from overwriting each other. Each file opens with an HTML comment holding
+    the article count and the section name, so the reload doesn't depend on
+    the LLM's H2 wording.
     """
     target_dir.mkdir(parents=True, exist_ok=True)
-    for draft in drafts:
-        slug = slugify_title(draft.name, max_length=40)
-        path = target_dir / f"{slug}.md"
-        header = f"<!-- articles: {draft.article_count} -->\n"
-        path.write_text(header + draft.content, encoding="utf-8")
+    for index, draft in enumerate(drafts):
+        slug = slugify_title(draft.name, max_length=40) or "section"
+        path = target_dir / f"{index:03d}-{slug}.md"
+        meta = json.dumps({"articles": draft.article_count, "name": draft.name}, ensure_ascii=False)
+        path.write_text(f"<!-- section: {meta} -->\n{draft.content}", encoding="utf-8")
+
+
+def _parse_section_header(line: str) -> dict[str, Any] | None:
+    """Parse a cached draft's first line, accepting the older article-count-only header."""
+    if match := _SECTION_HEADER_RE.fullmatch(line):
+        try:
+            data = json.loads(match.group(1))
+        except json.JSONDecodeError:
+            return None
+        return data if isinstance(data, dict) and "articles" in data else None
+    if match := _LEGACY_SECTION_HEADER_RE.fullmatch(line):
+        return {"articles": int(match.group(1))}
+    return None
 
 
 def load_section_drafts(source_dir: Path) -> list[SectionDraft]:
-    """Load section drafts from ``<slug>.md`` files written by ``save_section_drafts``.
+    """Load section drafts written by ``save_section_drafts``, in saved order.
 
-    Returns an empty list if the directory does not exist. Files missing an
-    article-count header or an H2 heading are skipped with a warning.
+    Returns an empty list if the directory does not exist. Files missing a
+    header, or a name in neither the header nor an H2 heading, are skipped
+    with a warning.
     """
     if not source_dir.exists():
         return []
 
     drafts: list[SectionDraft] = []
     for path in sorted(source_dir.glob("*.md")):
-        raw = path.read_text(encoding="utf-8")
-        match = re.match(r"<!-- articles: (\d+) -->\n(.*)", raw, re.DOTALL)
-        if not match:
-            logger.warning("Cached section {} missing article-count header; skipping", path.name)
+        header, _, content = path.read_text(encoding="utf-8").partition("\n")
+        meta = _parse_section_header(header)
+        if meta is None:
+            logger.warning("Cached section {} missing its header; skipping", path.name)
             continue
-        article_count = int(match.group(1))
-        content = match.group(2)
-        name = _extract_section_name(content)
+        name = str(meta.get("name") or _extract_section_name(content))
         if not name:
             logger.warning("Cached section {} missing H2 heading; skipping", path.name)
             continue
-        drafts.append(SectionDraft(name=name, content=content, article_count=article_count))
+        drafts.append(SectionDraft(name=name, content=content, article_count=int(meta["articles"])))
     return drafts
 
 

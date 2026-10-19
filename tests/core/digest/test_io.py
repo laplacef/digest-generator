@@ -436,6 +436,40 @@ class TestSaveLoadSectionDrafts:
     def test_missing_directory_returns_empty(self, tmp_path):
         assert load_section_drafts(tmp_path / "nope") == []
 
+    def test_reload_keeps_saved_order(self, tmp_path):
+        # Category order, deliberately not alphabetical.
+        names = ["Security", "AI & Machine Learning", "Business"]
+        drafts = [
+            SectionDraft(name=n, content=f"## {n}\n\nBody.\n", article_count=1) for n in names
+        ]
+        save_section_drafts(drafts, tmp_path / "sections")
+        assert [d.name for d in load_section_drafts(tmp_path / "sections")] == names
+
+    def test_name_comes_from_header_not_h2(self, tmp_path):
+        draft = SectionDraft(
+            name="AI & Machine Learning", content="## AI & ML\n\nBody.\n", article_count=2
+        )
+        save_section_drafts([draft], tmp_path / "sections")
+        assert load_section_drafts(tmp_path / "sections")[0].name == "AI & Machine Learning"
+
+    def test_long_titles_sharing_a_slug_both_survive(self, tmp_path):
+        prefix = "Infrastructure and Platform Engineering Updates "
+        drafts = [
+            SectionDraft(name=prefix + "East", content="## A\n\nOne.\n", article_count=1),
+            SectionDraft(name=prefix + "West", content="## B\n\nTwo.\n", article_count=1),
+        ]
+        save_section_drafts(drafts, tmp_path / "sections")
+        assert len(load_section_drafts(tmp_path / "sections")) == 2
+
+    def test_legacy_header_still_loads(self, tmp_path):
+        target = tmp_path / "sections"
+        target.mkdir()
+        (target / "security.md").write_text(
+            "<!-- articles: 4 -->\n## Security\n\nBody.\n", encoding="utf-8"
+        )
+        loaded = load_section_drafts(target)
+        assert [(d.name, d.article_count) for d in loaded] == [("Security", 4)]
+
     def test_file_without_header_is_skipped(self, tmp_path):
         target = tmp_path / "sections"
         target.mkdir()
