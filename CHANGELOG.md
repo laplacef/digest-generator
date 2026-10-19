@@ -3,6 +3,36 @@
 The format is based on [Common Changelog](https://common-changelog.org/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-10-19
+
+_This release resolves configuration from a single directory and fixes the crashes, hangs, and lost work found since 0.2.0._
+
+### Changed
+
+- **Breaking:** Resolve `feeds.yaml` and prompt overrides from one config directory (`--config` / `DIGEST_CONFIG`, else `~/.config/digest-generator`); `./digest-generator/` in the working directory is no longer read, and prompt overrides no longer layer across directories ([`f7a8e94`](https://github.com/laplacef/digest-generator/commit/f7a8e94))
+- **Breaking:** Report a missing `--feeds` or `--config` target as an error instead of falling back to another location ([`f7a8e94`](https://github.com/laplacef/digest-generator/commit/f7a8e94))
+- Apply `--feeds` and `--config` to the digest sections and prompt overrides as well as the feed list ([`f7a8e94`](https://github.com/laplacef/digest-generator/commit/f7a8e94))
+- Reject generic trend verbs such as Reshape and Accelerate in titles, which the lint reports as errors ([`aab956d`](https://github.com/laplacef/digest-generator/commit/aab956d))
+- Flag utilize and leverage as abstract verbs ([`e53212f`](https://github.com/laplacef/digest-generator/commit/e53212f))
+
+### Added
+
+- `--feeds` and `--config` options on `digest`, and `--config` on `summarize` ([`f7a8e94`](https://github.com/laplacef/digest-generator/commit/f7a8e94))
+- `write_digest` in the programmatic API ([`afde5a3`](https://github.com/laplacef/digest-generator/commit/afde5a3))
+- `title-missing` lint error for an empty frontmatter title ([`71b7ff5`](https://github.com/laplacef/digest-generator/commit/71b7ff5))
+- Author link in the package metadata ([`90751db`](https://github.com/laplacef/digest-generator/commit/90751db))
+
+### Fixed
+
+- Run the topic classifier on `cuda` and `mps` devices ([`a14c472`](https://github.com/laplacef/digest-generator/commit/a14c472))
+- Bound the feed fallback fetch by `FETCH_TIMEOUT`, so an unresponsive host no longer hangs the run ([`b2b171c`](https://github.com/laplacef/digest-generator/commit/b2b171c))
+- Write `<date>.md` from `api.run`, so `with_audio=True` finds the digest ([`afde5a3`](https://github.com/laplacef/digest-generator/commit/afde5a3))
+- Keep one failing article or section from discarding the rest of its batch ([`4c41515`](https://github.com/laplacef/digest-generator/commit/4c41515))
+- Keep the first title when the framer's retry comes back empty ([`71b7ff5`](https://github.com/laplacef/digest-generator/commit/71b7ff5))
+- Quote frontmatter values as YAML, so backslashes no longer break site builds ([`f2724e0`](https://github.com/laplacef/digest-generator/commit/f2724e0))
+- Keep section order and names when a run's section caches reload ([`eb0e42b`](https://github.com/laplacef/digest-generator/commit/eb0e42b))
+- Load a copied `.env.example` without reading comments as values ([`ebbf0c9`](https://github.com/laplacef/digest-generator/commit/ebbf0c9))
+
 ## [0.2.0] - 2026-07-28
 
 _Digest output is now checked by a deterministic lint that runs on every write._
@@ -47,5 +77,6 @@ Initial public release.
 - Centralized configuration via environment variables / `.env`
 - Structured logging with per-run log files and secret redaction
 
+[0.3.0]: https://github.com/laplacef/digest-generator/releases/tag/v0.3.0
 [0.2.0]: https://github.com/laplacef/digest-generator/releases/tag/v0.2.0
 [0.1.0]: https://github.com/laplacef/digest-generator/releases/tag/v0.1.0
