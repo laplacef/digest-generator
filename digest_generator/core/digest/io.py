@@ -33,6 +33,16 @@ _SENTENCE_END_RE = re.compile(r"[.!?](?=\s|$)")
 _INVISIBLE_WS_RE = re.compile(r"[\u00A0\u2009\u202F]")
 
 
+def _yaml_str(value: str) -> str:
+    """Quote ``value`` as a YAML double-quoted scalar.
+
+    A JSON string is a valid YAML double-quoted scalar, and ``json.dumps``
+    escapes backslashes, quotes, and control characters, which a bare
+    quote-escape misses (``C:\\Windows`` would break the site build).
+    """
+    return json.dumps(value, ensure_ascii=False)
+
+
 def _summary_for_frontmatter(text: str) -> str:
     """Pick a self-contained meta-description summary that is a whole sentence.
 
@@ -148,7 +158,6 @@ def build_digest_markdown(result: DigestResult) -> str:
     """
     title = normalize_output(result.title)
     content = normalize_output(result.content)
-    escaped_title = title.replace('"', '\\"')
 
     # ``slug`` MUST be quoted. Unquoted ``slug: 2026-03-17`` is parsed by YAML
     # as a Date, and Jekyll's UrlDrop#title calls ``.gsub`` on it while building
@@ -156,7 +165,7 @@ def build_digest_markdown(result: DigestResult) -> str:
     # unquoted on purpose: Jekyll expects a real Date there.
     lines = [
         "---",
-        f'title: "{escaped_title}"',
+        f"title: {_yaml_str(title)}",
         f'slug: "{build_digest_slug(result)}"',
         f"date: {result.date}",
         f"reading_time: {result.reading_time_minutes} min",
@@ -167,16 +176,15 @@ def build_digest_markdown(result: DigestResult) -> str:
     for block in content.strip().split("\n\n"):
         text = block.strip()
         if text and not text.startswith("#"):
-            summary = _summary_for_frontmatter(text).replace('"', '\\"')
+            summary = _summary_for_frontmatter(text)
             break
     if summary:
-        lines.append(f'summary: "{summary}"')
+        lines.append(f"summary: {_yaml_str(summary)}")
 
     if result.section_counts:
         lines.append("sections:")
         for section, count in result.section_counts.items():
-            escaped_section = section.replace('"', '\\"')
-            lines.append(f'  "{escaped_section}": {count}')
+            lines.append(f"  {_yaml_str(section)}: {count}")
 
     lines.append("---")
     lines.append("")

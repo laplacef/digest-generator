@@ -1,6 +1,7 @@
 """Tests for digest_generator/core/digest/io.py: slugify, filename plus markdown builders, stage cache."""
 
 import pytest
+import yaml
 
 from digest_generator.core.digest.io import (
     _SUMMARY_SOFT_CAP,
@@ -13,6 +14,7 @@ from digest_generator.core.digest.io import (
     save_section_drafts,
     slugify_title,
 )
+from digest_generator.core.digest.normalize import normalize_output
 from digest_generator.core.digest.types import (
     DigestFraming,
     DigestResult,
@@ -183,6 +185,33 @@ class TestBuildDigestMarkdown:
         )
         md = build_digest_markdown(result)
         assert r'title: "He said \"hello\""' in md
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            r"Backslash C:\Windows and \d+",
+            "Quote \"inside\" and 'single'",
+            "Colon: then # hash",
+            "Line\nbreak and\ttab",
+            "- leading dash {brace} [bracket] %percent",
+            "Ünïcode café 東京",
+        ],
+    )
+    def test_frontmatter_round_trips_through_yaml(self, text):
+        result = DigestResult(
+            title=text,
+            content="## Overview\n\nA lede sentence here.\n",
+            date="2026-03-15",
+            word_count=5,
+            reading_time_minutes=1,
+            article_count=1,
+            section_counts={text: 1},
+        )
+        front = build_digest_markdown(result).split("---\n")[1]
+        data = yaml.safe_load(front)
+        assert data["title"] == normalize_output(text)
+        assert data["sections"] == {text: 1}
+        assert data["slug"] == "2026-03-15"
 
     def test_content_follows_frontmatter(self):
         result = DigestResult(
