@@ -143,6 +143,14 @@ class TestStructuralErrors:
         assert findings
         assert findings[0].severity == ERROR
 
+    def test_empty_title_is_error(self) -> None:
+        md = CLEAN_DIGEST.replace(
+            'title: "Agents Collide with Identity as Budgets Tighten"', 'title: ""'
+        )
+        findings = [f for f in lint_digest(md) if f.category == "title-missing"]
+        assert findings
+        assert findings[0].severity == ERROR
+
     def test_h1_in_body_flagged(self) -> None:
         md = CLEAN_DIGEST.replace("## Overview", "# A Title\n\n## Overview")
         assert "h1-in-body" in _categories(md)

@@ -114,6 +114,8 @@ def _split_frontmatter(markdown: str) -> tuple[dict[str, str], str, int]:
 
 def _check_title(fields: dict[str, str]) -> list[LintFinding]:
     title = fields.get("title", "")
+    if fields and not title.strip():
+        return [LintFinding("title-missing", ERROR, 1, "Frontmatter title is empty.", "")]
     findings: list[LintFinding] = []
     for pattern, reason in TITLE_PATTERNS:
         if re.search(pattern, title):

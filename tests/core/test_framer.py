@@ -309,6 +309,15 @@ class TestRetryWithFeedback:
         assert framer._client.chat.call_count == 3
         assert result.title == "Sovereign Models Rise as Trust Falls"
 
+    def test_empty_retry_keeps_first_title(self, framer, sections):
+        framer._client.chat.side_effect = [
+            _mock_response("AI Agents Drive Enterprise Workflows"),
+            _mock_response("   "),
+            _mock_response("Intro paragraph here."),
+        ]
+        result = framer.frame(sections)
+        assert result.title == "AI Agents Drive Enterprise Workflows"
+
     def test_retries_on_colon_split(self, framer, sections):
         framer._client.chat.side_effect = [
             _mock_response("Security: Quarter in Review"),

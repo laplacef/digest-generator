@@ -463,7 +463,8 @@ def _cached_or_fresh_framing(
             return loaded
 
     framing = builder()
-    if run_dir is not None:
+    # An empty title is never cached, so the next run asks the framer again.
+    if run_dir is not None and framing.title:
         save_json_stage(framing, run_dir / _ASSEMBLY_DIR / "framing.json")
     return framing
 
