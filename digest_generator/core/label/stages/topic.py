@@ -169,7 +169,7 @@ class TopicClassifier:
             premises = [t for t in chunk for _ in range(n_labels)]
             hyps = hypotheses * len(chunk)
 
-            inputs = self.tokenizer(
+            encoded = self.tokenizer(
                 premises,
                 hyps,
                 return_tensors="pt",
@@ -177,8 +177,10 @@ class TopicClassifier:
                 truncation=True,
                 max_length=settings.topic_max_length,
             )
+            # The tokenizer returns CPU tensors; the model sits on self.device.
+            inputs = {key: tensor.to(self.device) for key, tensor in encoded.items()}
 
-            with torch.no_grad():
+            with torch.inference_mode():
                 logits = self.model(**inputs).logits
 
             # ``entail[i, j]`` is text i's entailment probability for label j.

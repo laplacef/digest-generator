@@ -229,6 +229,33 @@ class TestTopicClassifier:
         classifier._infer_batch(texts, threshold=0.5)
         assert classifier.model.call_count == 1
 
+    def test_moves_inputs_to_model_device(self, classifier):
+        """Tokenizer output lands on the model's device before the forward pass."""
+        moved = []
+
+        def fake_tensor(rows):
+            tensor = MagicMock()
+
+            def to(device):
+                moved.append(device)
+                return torch.ones((rows, 4), dtype=torch.long)
+
+            tensor.to.side_effect = to
+            return tensor
+
+        def fake_tokenizer(premises, hyps, **kwargs):
+            rows = len(premises)
+            return {"input_ids": fake_tensor(rows), "attention_mask": fake_tensor(rows)}
+
+        def fake_model(**inputs):
+            return SimpleNamespace(logits=torch.full((inputs["input_ids"].shape[0], 3), 1.0))
+
+        classifier.tokenizer.side_effect = fake_tokenizer
+        classifier.model.side_effect = fake_model
+        classifier.device = DeviceType.CUDA  # recorded as the .to() target, never executed
+        classifier._infer_batch(["a"], threshold=0.5)
+        assert moved == [DeviceType.CUDA, DeviceType.CUDA]
+
     def test_empty_summaries(self, classifier):
         assert classifier.classify_summaries([]) == []
 
