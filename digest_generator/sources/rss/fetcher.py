@@ -1,12 +1,15 @@
 """RSS feed fetching, article extraction, and content quality filtering.
 
-Uses cloudscraper for Cloudflare bypass with fallback to direct feedparser.
-Extracts full article text via CSS selectors, falling back to RSS summary.
+Uses cloudscraper for Cloudflare bypass with a bounded stdlib fetch as the
+feed fallback. Extracts full article text via CSS selectors, falling back to
+RSS summary.
 """
 
 import asyncio
 import calendar
+import urllib.request
 from datetime import UTC, datetime, timedelta
+from urllib.parse import urlparse
 
 import cloudscraper
 import feedparser
@@ -16,6 +19,23 @@ from digest_generator.core.types import Entry, Filter
 from digest_generator.shared.logging import current_span, log_stage, logger
 from digest_generator.shared.settings import settings
 from digest_generator.sources.rss.types import BoilerplateMarker, Feed, SelectorType
+
+_FEED_URL_SCHEMES = frozenset({"http", "https"})
+
+
+def _fetch_feed_bytes(url: str, timeout: float) -> bytes:
+    """Fetch a feed body with the stdlib client, bounded by ``timeout``.
+
+    The fallback for hosts that reject cloudscraper's TLS profile but answer a
+    default client. Only http(s) URLs are fetched.
+    """
+    if urlparse(url).scheme not in _FEED_URL_SCHEMES:
+        msg = f"Unsupported feed URL scheme: {url}"
+        raise ValueError(msg)
+    request = urllib.request.Request(url, headers={"User-Agent": feedparser.USER_AGENT})
+    with urllib.request.urlopen(request, timeout=timeout) as response:  # nosec B310
+        body: bytes = response.read()
+    return body
 
 
 class FeedFetcher:
@@ -31,7 +51,7 @@ class FeedFetcher:
     async def fetch_entries(self, feed: Feed, filter: Filter) -> list[Entry]:
         """Fetch and process recent entries from an RSS feed.
 
-        Fetches the feed (cloudscraper with feedparser fallback), filters entries
+        Fetches the feed (cloudscraper, then a bounded direct fetch), filters entries
         by date and uniqueness, then extracts full article content for each.
 
         Args:
@@ -53,10 +73,16 @@ class FeedFetcher:
                 parsed_feed = feedparser.parse(response.content)
             except Exception as e:
                 logger.warning(
-                    "Cloudscraper failed for {}, falling back to feedparser: {}", feed.url, e
+                    "Cloudscraper failed for {}, falling back to a direct fetch: {}", feed.url, e
                 )
-                # Fallback to direct feedparser if cloudscraper fails
-                parsed_feed = await asyncio.to_thread(feedparser.parse, feed.url)
+                try:
+                    content = await asyncio.to_thread(
+                        _fetch_feed_bytes, feed.url, settings.fetch_timeout
+                    )
+                except Exception as fallback_error:
+                    logger.warning("Direct fetch failed for {}: {}", feed.url, fallback_error)
+                    content = b""
+                parsed_feed = feedparser.parse(content)
 
             since = filter.since or (datetime.now(UTC) - timedelta(days=filter.days_back))
             candidate_entries: list[feedparser.FeedParserDict] = self._filter_entries(
