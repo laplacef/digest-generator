@@ -27,8 +27,10 @@ from digest_generator.api import (
     resolve_feeds,
     run,
     summarize,
+    write_digest,
 )
 from digest_generator.core.categories import category_registry
+from digest_generator.core.digest.types import DigestResult
 from digest_generator.core.label.io import (
     labeled_path,
     load_labeled,
@@ -424,7 +426,10 @@ class TestRunComposition:
             return_value=[[Label(value=TopicType.LLM, confidence=0.5)]]
         )
 
-        with patch("digest_generator.api.digest") as digest_spy:
+        with (
+            patch("digest_generator.api.digest") as digest_spy,
+            patch("digest_generator.api.write_digest") as write_spy,
+        ):
             run(
                 [feed],
                 Filter.resolve(days_back=7),
@@ -437,6 +442,7 @@ class TestRunComposition:
 
         digest_spy.assert_called_once()
         assert digest_spy.call_args.kwargs["run_dir"] == tmp_path
+        write_spy.assert_called_once_with(digest_spy.return_value, run_dir=tmp_path)
 
 
 # =============================================================================
@@ -622,6 +628,7 @@ class TestRenderAudio:
             patch("digest_generator.api.summarize", new_callable=AsyncMock) as mock_sum,
             patch("digest_generator.api.label", new_callable=AsyncMock) as mock_lbl,
             patch("digest_generator.api.digest") as mock_digest,
+            patch("digest_generator.api.write_digest") as mock_write,
             patch("digest_generator.api.render_audio") as mock_audio,
         ):
             mock_audio.return_value = tmp_path / "audio" / "x.opus"
@@ -631,14 +638,13 @@ class TestRenderAudio:
         mock_sum.assert_called_once()
         mock_lbl.assert_called_once()
         mock_digest.assert_called_once()
+        mock_write.assert_called_once()
         mock_audio.assert_called_once_with(run_dir=tmp_path)
 
     def test_with_audio_requires_with_digest(self, tmp_path, feed):
-        """Audio needs the digest .md; with_digest=False + with_audio=True is invalid."""
+        """Audio needs the digest .md, so the invalid combination fails before any fetch."""
         with (
-            patch("digest_generator.api.fetch", new_callable=AsyncMock),
-            patch("digest_generator.api.summarize", new_callable=AsyncMock),
-            patch("digest_generator.api.label", new_callable=AsyncMock),
+            patch("digest_generator.api.fetch", new_callable=AsyncMock) as mock_fetch,
             pytest.raises(ValueError, match="with_audio=True requires with_digest=True"),
         ):
             run(
@@ -648,6 +654,34 @@ class TestRenderAudio:
                 with_digest=False,
                 with_audio=True,
             )
+        mock_fetch.assert_not_called()
+
+
+class TestWriteDigest:
+    def _result(self):
+        return DigestResult(
+            title="Weekly Notes",
+            content="## Overview\n\nA short lede sentence.\n",
+            date="2026-03-15",
+            word_count=4,
+            reading_time_minutes=1,
+            article_count=2,
+        )
+
+    def test_writes_date_named_deliverable(self, tmp_path):
+        path = write_digest(self._result(), run_dir=tmp_path)
+        assert path == tmp_path / "2026-03-15.md"
+        text = path.read_text(encoding="utf-8")
+        assert text.startswith("---\n")
+        assert 'title: "Weekly Notes"' in text
+
+    def test_patches_meta_only_when_present(self, tmp_path):
+        with patch("digest_generator.shared.runtime.meta.update_run_meta_digest") as patch_meta:
+            write_digest(self._result(), run_dir=tmp_path)
+            patch_meta.assert_not_called()
+            (tmp_path / "meta.json").write_text("{}", encoding="utf-8")
+            write_digest(self._result(), run_dir=tmp_path)
+            patch_meta.assert_called_once_with(tmp_path, "Weekly Notes", "2026-03-15.md")
 
 
 _FEEDS_YAML = """\

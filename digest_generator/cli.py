@@ -141,9 +141,7 @@ def _maybe_run_digest(
     if not enabled:
         return False
     from digest_generator import api
-    from digest_generator.core.digest.io import build_digest_filename, build_digest_markdown
     from digest_generator.shared.logging import logger
-    from digest_generator.shared.runtime.meta import update_run_meta_digest
 
     try:
         digest_result = api.digest(run_dir=run_dir, date_range=date_range)
@@ -156,54 +154,8 @@ def _maybe_run_digest(
     if not digest_result.content:
         logger.warning("Digest generation returned empty content")
         return False
-    digest_filename = build_digest_filename(digest_result)
-    digest_path = run_dir / digest_filename
-    markdown = build_digest_markdown(digest_result)
-    digest_path.write_text(markdown, encoding="utf-8")
-    update_run_meta_digest(run_dir, digest_result.title, digest_filename)
-    logger.info("Digest written to {}", digest_path)
-    _lint_written_digest(run_dir, markdown)
+    api.write_digest(digest_result, run_dir=run_dir)
     return True
-
-
-def _corpus_urls(run_dir: Path) -> frozenset[str] | None:
-    """Canonicalized fetched URLs for the lint, or ``None`` if unavailable.
-
-    ``None`` disables the membership check rather than failing it: a run whose
-    corpus was pruned or never written would otherwise report every citation
-    as an invented slug, which is worse than not checking at all.
-    """
-    from digest_generator.core.digest.lint import canonical_url
-    from digest_generator.sources.rss.io import fetched_urls
-
-    urls = fetched_urls(run_dir)
-    if not urls:
-        return None
-    return frozenset(canonical_url(u) for u in urls)
-
-
-def _lint_written_digest(run_dir: Path, markdown: str) -> None:
-    """Lint a freshly written digest and log the findings. Never raises.
-
-    Reporting only. A digest costs a full pipeline of LLM calls, so a phrase
-    warning must not discard it, and the markdown is on disk either way. The
-    ``lint`` command is the gating entry point, and it is also the one to
-    re-run after hand-editing a staged digest, since these findings describe
-    the file as generated rather than as published.
-    """
-    from digest_generator.core.digest.lint import format_findings, has_errors, lint_digest
-    from digest_generator.shared.logging import logger
-
-    try:
-        findings = lint_digest(markdown, known_urls=_corpus_urls(run_dir))
-    except Exception as e:  # reporting must never break a completed write
-        logger.warning("Digest lint skipped ({}: {})", type(e).__name__, e)
-        return
-    if not findings:
-        logger.info("Digest lint clean")
-        return
-    log = logger.error if has_errors(findings) else logger.warning
-    log("Digest lint found {} issue(s):\n{}", len(findings), format_findings(findings))
 
 
 def _maybe_render_audio(run_dir: Path, *, enabled: bool) -> None:
@@ -775,13 +727,8 @@ def digest(
         raise typer.Exit(1)
 
     from digest_generator import api
-    from digest_generator.core.digest.io import (
-        build_digest_filename,
-        build_digest_markdown,
-    )
     from digest_generator.shared.llm.sampling import SamplingConfig
     from digest_generator.shared.logging import logger
-    from digest_generator.shared.runtime.meta import update_run_meta_digest
 
     date_range = _read_date_range(run_dir)
     logger.info("Generating digest from {}", run_dir)
@@ -823,18 +770,7 @@ def digest(
         logger.warning("No digest generated (empty result)")
         raise typer.Exit(1)
 
-    digest_filename = build_digest_filename(digest_result)
-    digest_path = run_dir / digest_filename
-    markdown = build_digest_markdown(digest_result)
-    digest_path.write_text(markdown, encoding="utf-8")
-
-    # Update meta.json if it exists (created by `run` command, not by standalone `digest`)
-    meta_path = run_dir / "meta.json"
-    if meta_path.exists():
-        update_run_meta_digest(run_dir, digest_result.title, digest_filename)
-
-    logger.info("Digest written to {}", digest_path)
-    _lint_written_digest(run_dir, markdown)
+    api.write_digest(digest_result, run_dir=run_dir)
 
     if audio:
         from digest_generator.shared.logging import run_context
@@ -938,6 +874,7 @@ def lint(
     it, only malformed targets are flagged, since there is nothing to compare
     against.
     """
+    from digest_generator.api import _corpus_urls
     from digest_generator.core.digest.lint import format_findings, has_errors, lint_digest
 
     markdown = digest_file.read_text(encoding="utf-8")

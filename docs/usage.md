@@ -257,20 +257,20 @@ The CLI is a thin adapter over `digest_generator.api`. The main entry points:
 
 - **`fetch`, `summarize`, `label`.** Async per-stage primitives with cache-skip and resume.
 - **`digest`.** Reads the corpus, runs the digest pipeline, and returns a `DigestResult`, or `None` when there is nothing to digest. It writes the stage caches but not the final `<date>.md`.
-- **`run`.** Runs fetch, then summarize and label in parallel, then an optional `digest`. It returns `run_dir` and writes no markdown.
+- **`write_digest`.** Writes a `DigestResult` to `<run_dir>/<date>.md`, records it in `meta.json` when that file exists, logs the lint findings, and returns the path.
+- **`run`.** Runs fetch, then summarize and label in parallel, then (with `with_digest=True`, the default) `digest` and `write_digest`, and `render_audio` with `with_audio=True`. It returns `run_dir`.
 - **`render_audio`.** Narrates the `<date>.md` at the run root to `audio/<date>.opus` and returns the `.opus` path. It raises `FileNotFoundError` when the run root has no `.md`, `ValueError` when it has more than one, and `MissingBinaryError` (from `digest_generator.shared.tts.engine`) when `piper` or `ffmpeg` is not on `PATH`.
 
 Plus `resolve_feeds` and `list_feeds` helpers. `resolve_feeds` raises `FeedsConfigError` (a `ValueError` subclass in `digest_generator.sources.rss.config`) when no feeds file is found or the file is invalid, and `ValueError` for an unknown content type or feed name. Creating the run directory and wiring up logging and telemetry is the caller's responsibility; `digest_generator.cli` handles it for command-line use.
 
 ### Full pipeline
 
-`run` with `with_digest=True` runs the digest stages but discards the result, so the deliverable needs one more step. Build the corpus with `run`, then call `digest` and write the file the way the CLI does. `render_audio` reads that file from disk, so call it after the write:
+`run` builds the corpus, generates the digest, and writes `<run_dir>/<date>.md`. Pass `with_audio=True` to narrate it too (needs Piper and ffmpeg):
 
 ```python
 from pathlib import Path
 
-from digest_generator.api import digest, render_audio, resolve_feeds, run
-from digest_generator.core.digest.io import build_digest_filename, build_digest_markdown
+from digest_generator.api import resolve_feeds, run
 from digest_generator.core.types import Filter
 
 feeds = resolve_feeds(content_types=["ai"])
@@ -278,13 +278,7 @@ filter = Filter.resolve(days_back=3)
 run_dir = Path("output/myrun")
 run_dir.mkdir(parents=True, exist_ok=True)
 
-run(feeds, filter, run_dir=run_dir, with_digest=False)  # fetch, then summarize + label
-
-result = digest(run_dir=run_dir)
-if result is not None and result.content:
-    digest_path = run_dir / build_digest_filename(result)
-    digest_path.write_text(build_digest_markdown(result), encoding="utf-8")
-    opus_path = render_audio(run_dir=run_dir)  # optional; needs Piper and ffmpeg
+run(feeds, filter, run_dir=run_dir)  # fetch, summarize + label, digest, write <date>.md
 ```
 
 ### Per-stage invocation

@@ -1,10 +1,11 @@
 """Public programmatic API for the digest-generator pipeline.
 
-Six entry points: three async per-stage primitives (``fetch``,
-``summarize``, ``label``), the sync digest pipeline (``digest``), the
-``run`` composition, and the audio renderer (``render_audio``). Each
-per-stage primitive is independently invocable and cache-aware: re-running on
-the same ``run_dir`` skips work whose batch file already exists.
+Entry points: the async per-stage primitives (``fetch``, ``summarize``,
+``label``), the sync digest pipeline (``digest``) and its deliverable writer
+(``write_digest``), the ``run`` composition, and the audio renderer
+(``render_audio``). Each per-stage primitive is independently invocable and
+cache-aware: re-running on the same ``run_dir`` skips work whose batch file
+already exists.
 
 Run setup (``run_dir`` creation, ``run_context``, ``log_stage``,
 ``llm_telemetry``, ``meta.json``) is the caller's responsibility.
@@ -24,7 +25,7 @@ Usage::
     run_dir = Path("output/myrun")
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    run(feeds, filter, run_dir=run_dir, with_digest=True)
+    run(feeds, filter, run_dir=run_dir)  # writes run_dir / "<date>.md"
 """
 
 from __future__ import annotations
@@ -359,12 +360,12 @@ def run(
         fetcher: Injected fetcher (mostly for tests).
         summarizer: Injected summarizer (mostly for tests).
         classifier: Injected classifier (mostly for tests).
-        with_digest: When ``True`` (default), generate the markdown digest
-            after the corpus build. Maps to today's ``--no-digest`` CLI flag.
-        with_audio: When ``True``, render the digest to audio after the
-            digest stage. Default ``False`` so dev iteration stays cheap;
-            pass ``--audio`` explicitly to enable it.
-            Implies ``with_digest=True``.
+        with_digest: When ``True`` (default), generate the digest after the
+            corpus build and write ``<date>.md`` via ``write_digest``. The
+            inverse of the ``--no-digest`` CLI flag.
+        with_audio: When ``True``, render the written digest to audio.
+            Default ``False`` so dev iteration stays cheap. Requires
+            ``with_digest=True``.
         writer_model / editorial_model / framer_model / watcher_model:
             Override Ollama models for the digest stages.
         writer_sampling / editorial_sampling / framer_sampling / watcher_sampling:
@@ -372,10 +373,19 @@ def run(
         date_range: Optional ``(since, until)`` date strings for digest period.
 
     Returns:
-        ``run_dir`` (data lives on disk; ``api.digest`` is the canonical
-        consumer that joins ``source-summarized/`` + ``source-labeled/``).
+        ``run_dir``; every artifact lives on disk under it.
+
+    Raises:
+        ValueError: If ``with_audio`` is set without ``with_digest``, before
+            any work starts.
     """
     import asyncio
+
+    from digest_generator.shared.logging import logger
+
+    if with_audio and not with_digest:
+        msg = "with_audio=True requires with_digest=True (no digest, nothing to narrate)"
+        raise ValueError(msg)
 
     async def _build_corpus() -> None:
         await fetch(feeds, filter, run_dir=run_dir, fetcher=fetcher)
@@ -387,7 +397,7 @@ def run(
     asyncio.run(_build_corpus())
 
     if with_digest:
-        digest(
+        result = digest(
             run_dir=run_dir,
             writer_model=writer_model,
             editorial_model=editorial_model,
@@ -399,11 +409,12 @@ def run(
             watcher_sampling=watcher_sampling,
             date_range=date_range,
         )
+        if result is not None and result.content:
+            write_digest(result, run_dir=run_dir)
+        else:
+            logger.warning("No digest generated for {} (no summarized content)", run_dir)
 
     if with_audio:
-        if not with_digest:
-            msg = "with_audio=True requires with_digest=True (no digest, nothing to narrate)"
-            raise ValueError(msg)
         render_audio(run_dir=run_dir)
 
     return run_dir
@@ -504,6 +515,63 @@ def digest(
             watcher_sampling=watcher_sampling,
             date_range=date_range,
         )
+
+
+def write_digest(result: DigestResult, *, run_dir: Path) -> Path:
+    """Write the digest deliverable and return its path.
+
+    Writes ``<run_dir>/<date>.md``, records the title and filename in
+    ``meta.json`` when that file exists, and logs the post-write lint
+    findings. The lint only reports: a digest costs a full pipeline of LLM
+    calls, so a finding never discards it; ``digest-generator lint`` is the
+    gate.
+    """
+    from digest_generator.core.digest.io import build_digest_filename, build_digest_markdown
+    from digest_generator.shared.logging import logger
+    from digest_generator.shared.runtime.meta import update_run_meta_digest
+
+    filename = build_digest_filename(result)
+    path = run_dir / filename
+    markdown = build_digest_markdown(result)
+    path.write_text(markdown, encoding="utf-8")
+    if (run_dir / "meta.json").exists():
+        update_run_meta_digest(run_dir, result.title, filename)
+    logger.info("Digest written to {}", path)
+    _log_lint_findings(run_dir, markdown)
+    return path
+
+
+def _corpus_urls(run_dir: Path) -> frozenset[str] | None:
+    """Canonicalized fetched URLs for the lint, or ``None`` if unavailable.
+
+    ``None`` disables the membership check rather than failing it: a run whose
+    corpus was pruned or never written would otherwise report every citation
+    as an invented slug, which is worse than not checking at all.
+    """
+    from digest_generator.core.digest.lint import canonical_url
+    from digest_generator.sources.rss.io import fetched_urls
+
+    urls = fetched_urls(run_dir)
+    if not urls:
+        return None
+    return frozenset(canonical_url(u) for u in urls)
+
+
+def _log_lint_findings(run_dir: Path, markdown: str) -> None:
+    """Lint a freshly written digest and log the findings. Never raises."""
+    from digest_generator.core.digest.lint import format_findings, has_errors, lint_digest
+    from digest_generator.shared.logging import logger
+
+    try:
+        findings = lint_digest(markdown, known_urls=_corpus_urls(run_dir))
+    except Exception as e:  # reporting must never break a completed write
+        logger.warning("Digest lint skipped ({}: {})", type(e).__name__, e)
+        return
+    if not findings:
+        logger.info("Digest lint clean")
+        return
+    log = logger.error if has_errors(findings) else logger.warning
+    log("Digest lint found {} issue(s):\n{}", len(findings), format_findings(findings))
 
 
 def render_audio(
