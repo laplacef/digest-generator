@@ -9,26 +9,26 @@ _Digest output is now checked by a deterministic lint that runs on every write._
 
 ### Changed
 
-- Normalize digest output deterministically, folding locale, scale, and notation drift ([`484f495`](https://github.com/laplacef/digest-generator/commit/484f495))
-- Draft sections concurrently ([`f858ffb`](https://github.com/laplacef/digest-generator/commit/f858ffb))
-- Batch topic inference across articles ([`3f26140`](https://github.com/laplacef/digest-generator/commit/3f26140))
-- Diversify title framing shapes ([`7193117`](https://github.com/laplacef/digest-generator/commit/7193117))
-- Rewrite vague thesis-shaped paragraph openers ([`a671938`](https://github.com/laplacef/digest-generator/commit/a671938))
-- Normalize currency scale letters, so `$100 M` becomes `$100 million` ([`5d8e19b`](https://github.com/laplacef/digest-generator/commit/5d8e19b))
+- Normalize digest output deterministically, folding locale, scale, and notation drift ([`ab9e612`](https://github.com/laplacef/digest-generator/commit/ab9e612))
+- Draft sections concurrently ([`4fe48b3`](https://github.com/laplacef/digest-generator/commit/4fe48b3))
+- Batch topic inference across articles ([`d9cfd2c`](https://github.com/laplacef/digest-generator/commit/d9cfd2c))
+- Diversify title framing shapes ([`4b0a7eb`](https://github.com/laplacef/digest-generator/commit/4b0a7eb))
+- Rewrite vague thesis-shaped paragraph openers ([`3d99305`](https://github.com/laplacef/digest-generator/commit/3d99305))
+- Normalize currency scale letters, so `$100 M` becomes `$100 million` ([`263142f`](https://github.com/laplacef/digest-generator/commit/263142f))
 
 ### Added
 
-- `lint` command that checks a digest file and exits non-zero on error findings ([`284b5c1`](https://github.com/laplacef/digest-generator/commit/284b5c1))
-- Automatic lint reporting after every digest write ([`284b5c1`](https://github.com/laplacef/digest-generator/commit/284b5c1))
-- Importable golden-output lint over assembled digest markdown ([`1103abb`](https://github.com/laplacef/digest-generator/commit/1103abb))
-- Link-target validation against a run's fetched corpus, catching invented or mutated citation URLs ([`10fe62d`](https://github.com/laplacef/digest-generator/commit/10fe62d))
+- `lint` command that checks a digest file and exits non-zero on error findings ([`73f960f`](https://github.com/laplacef/digest-generator/commit/73f960f))
+- Automatic lint reporting after every digest write ([`73f960f`](https://github.com/laplacef/digest-generator/commit/73f960f))
+- Importable golden-output lint over assembled digest markdown ([`b309ba7`](https://github.com/laplacef/digest-generator/commit/b309ba7))
+- Link-target validation against a run's fetched corpus, catching invented or mutated citation URLs ([`91da782`](https://github.com/laplacef/digest-generator/commit/91da782))
 
 ### Fixed
 
-- Emit the frontmatter summary as a whole sentence instead of a truncated fragment ([`5762033`](https://github.com/laplacef/digest-generator/commit/5762033))
-- Prevent internal citation keys leaking into prose and require per-section citations ([`efa0fa2`](https://github.com/laplacef/digest-generator/commit/efa0fa2))
+- Emit the frontmatter summary as a whole sentence instead of a truncated fragment ([`5252db1`](https://github.com/laplacef/digest-generator/commit/5252db1))
+- Prevent internal citation keys leaking into prose and require per-section citations ([`45cdbe4`](https://github.com/laplacef/digest-generator/commit/45cdbe4))
 
-## [0.1.0] - 2026-06-20
+## [0.1.0] - 2026-06-22
 
 Initial public release.
 
