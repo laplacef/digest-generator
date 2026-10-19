@@ -12,6 +12,8 @@ assignees: ''
 
 ## Steps to reproduce
 
+<!-- The smallest sequence of commands, input, or code that triggers the bug. -->
+
 1.
 2.
 3.
@@ -22,17 +24,15 @@ assignees: ''
 
 ## Actual behavior
 
-<!-- What actually happened. Include error messages or logs if available. -->
-
-## Minimal reproduction
-
-<!-- The smallest command, input, or code snippet that triggers the bug. -->
+<!-- What actually happened. Include error messages or the relevant lines of the run's run.log. Redact HF_TOKEN, OLLAMA_API_KEY, and any other credentials before pasting. -->
 
 ## Environment
 
 - OS:
 - Python version:
-- Project version / commit:
+- Install method (uv tool, pipx, pip, or a clone):
+- digest-generator version (`uv tool list` or `pip show digest-generator`; commit hash for a clone):
+- Ollama (local or cloud) and the model names in use:
 
 ## Additional context
 

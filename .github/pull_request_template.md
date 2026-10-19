@@ -6,17 +6,9 @@
 
 Closes #<issue-number>
 
-## Type of change
-
-- [ ] Feature
-- [ ] Bug fix
-- [ ] Documentation
-- [ ] Refactor
-- [ ] Other
-
 ## Checklist
 
-- [ ] My change follows the project's coding standards (see [CONTRIBUTING.md](../CONTRIBUTING.md)).
+- [ ] My change follows the project's coding standards (see [CONTRIBUTING.md](https://github.com/laplacef/digest-generator/blob/main/CONTRIBUTING.md)).
 - [ ] Commits follow Conventional Commits.
 - [ ] I ran `uv run pre-commit run --all-files` and `uv run pytest` locally.
 - [ ] I added or updated tests for my change.

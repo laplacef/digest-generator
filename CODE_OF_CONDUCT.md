@@ -28,8 +28,3 @@ Project maintainers are responsible for clarifying and enforcing these standards
 Instances of unacceptable behavior may be reported to the maintainers through the contact form at <https://laplacef.me/contact>. All complaints will be reviewed and investigated promptly and fairly. Maintainers are obligated to respect the privacy and security of the reporter of any incident.
 
 This Code of Conduct applies within all community spaces and also applies when an individual is officially representing the community in public spaces.
-
-## Attribution
-
-This Code of Conduct is adapted from the [Contributor Covenant](https://www.contributor-covenant.org/), version 2.1, available at
-<https://www.contributor-covenant.org/version/2/1/code_of_conduct/>. The enforcement guidelines are based on the Contributor Covenant's community-impact ladder.
