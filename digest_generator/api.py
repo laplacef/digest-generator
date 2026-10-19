@@ -55,26 +55,30 @@ def resolve_feeds(
     Args:
         content_types: Content type values to include (e.g., ``["ai", "security"]``).
         feed_names: Feed names to include (e.g., ``["openai-news"]``).
-        feeds_file: Explicit ``feeds.yaml`` path; overrides discovery.
-        config_dir: Config directory holding ``feeds.yaml``; overrides discovery.
+        feeds_file: Explicit ``feeds.yaml`` path.
+        config_dir: Config directory holding ``feeds.yaml`` (else ``DIGEST_CONFIG``, else
+            ``~/.config/digest-generator``).
 
     Returns:
         Filtered list of ``Feed`` objects.
 
+    The resolved file's categories also become the active digest sections
+    (``category_registry``), so a later ``digest`` groups articles by the same
+    config the feeds came from.
+
     Raises:
-        FeedsConfigError: If no feeds file is found or it is invalid.
+        FeedsConfigError: If the feeds file does not exist or is invalid.
         ValueError: If a content type or feed name is invalid, or no feeds match.
     """
-    from digest_generator.sources.rss.config import (
-        load_configured_categories,
-        load_configured_feeds,
-    )
+    from digest_generator.core.categories import category_registry
+    from digest_generator.sources.rss.config import load_configured
 
-    all_feeds = load_configured_feeds(feeds_file=feeds_file, config_dir=config_dir)
+    categories, all_feeds = load_configured(feeds_file=feeds_file, config_dir=config_dir)
+    category_registry.set(categories)
     result = all_feeds
 
     if content_types:
-        valid = load_configured_categories(feeds_file=feeds_file, config_dir=config_dir).id_set()
+        valid = categories.id_set()
         for ct in content_types:
             if ct not in valid:
                 msg = f"Unknown content type '{ct}'. Valid: {', '.join(sorted(valid))}"
@@ -612,8 +616,9 @@ def list_feeds(
 
     Args:
         content_types: Content type values to filter by.
-        feeds_file: Explicit ``feeds.yaml`` path; overrides discovery.
-        config_dir: Config directory holding ``feeds.yaml``; overrides discovery.
+        feeds_file: Explicit ``feeds.yaml`` path.
+        config_dir: Config directory holding ``feeds.yaml`` (else ``DIGEST_CONFIG``, else
+            ``~/.config/digest-generator``).
 
     Returns:
         List of ``Feed`` objects.

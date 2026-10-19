@@ -48,9 +48,9 @@ The tool ships with no feeds. Write a starter and edit it:
 uv run digest-generator init   # writes ~/.config/digest-generator/feeds.yaml
 ```
 
-The file has two blocks. `categories:` defines your digest sections (each a stable `id` and a display `title`), in the order they appear in the digest. `feeds:` lists each feed's `name`, `url`, and `category` (which must match one of your category ids). [`usage.md`](./usage.md#feed-configuration) covers where the loader looks for the file and how to point at another one.
+The file has two blocks. `categories:` defines your digest sections (each a stable `id` and a display `title`), in the order they appear in the digest. `feeds:` lists each feed's `name`, `url`, and `category` (which must match one of your category ids). [`usage.md`](./usage.md#feed-configuration) covers which file is read and how to point at another one.
 
-The bundled prompts are generic and topic-neutral, so no prompt setup is required. To tune the voice for your topic, drop override templates into a `prompts/` directory; see [`usage.md`](./usage.md#prompt-overrides) for the search order and template names.
+The bundled prompts are generic and topic-neutral, so no prompt setup is required. To tune the voice for your topic, drop override templates into `prompts/` next to your `feeds.yaml`; see [`usage.md`](./usage.md#prompt-overrides) for the template names.
 
 ### 6. Verify the core install
 
@@ -146,7 +146,7 @@ Override per invocation with `digest-generator run --device cuda` or `digest-gen
 
 **Ollama 401 or 403.** A 401 means the cloud credentials are missing or invalid: check `OLLAMA_API_KEY`, or run `ollama signin` for a local server. A 403 means your account cannot use that model; choose one it can access and set the matching `*_MODEL` variable. A 429 is a rate limit, which the client retries with backoff; lowering `OLLAMA_CONCURRENCY` makes it rarer.
 
-**`No feeds.yaml found`.** The loader found no file in its search path (the error lists each path it checked). Run `digest-generator init`, or pass `--feeds <file>` or `--config <dir>`.
+**`No feeds.yaml found at ...`.** The selected file does not exist; the error names the path it checked. Run `digest-generator init`, or pass `--feeds <file>` or `--config <dir>`.
 
 **`Unknown content type '...'`.** The `-c` flag takes the `id` values under `categories:` in your `feeds.yaml`, and the error lists the valid ones. The starter file defines `ai`, `engineering`, and `security`.
 

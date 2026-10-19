@@ -244,15 +244,25 @@ def _emit_pipeline_tokens(counter: "TokenCounter") -> None:
 def _apply_env_overrides(
     device: str | None,
     output_dir: str | None,
+    *,
+    feeds_file: str | None = None,
+    config_dir: str | None = None,
 ) -> None:
     """Set environment variables before settings are imported.
 
     Must be called before any import that triggers ``Settings()`` instantiation.
+    Exporting ``--feeds`` and ``--config`` makes the digest sections and the
+    prompt overrides, which resolve through settings, follow the same config
+    the feeds came from.
     """
     if device:
         os.environ["DEVICE"] = device
     if output_dir:
         os.environ["OUTPUT_DIR"] = output_dir
+    if feeds_file:
+        os.environ["FEEDS_FILE"] = feeds_file
+    if config_dir:
+        os.environ["DIGEST_CONFIG"] = config_dir
 
 
 def _parse_date(value: str) -> datetime:
@@ -339,11 +349,11 @@ def run(
     ] = None,
     feeds_file: Annotated[
         str | None,
-        typer.Option("--feeds", help="Path to a feeds.yaml file (overrides discovery)."),
+        typer.Option("--feeds", help="Path to a feeds.yaml file."),
     ] = None,
     config_dir: Annotated[
         str | None,
-        typer.Option("--config", help="Config directory holding feeds.yaml."),
+        typer.Option("--config", help="Config directory holding feeds.yaml and prompts/."),
     ] = None,
     output_dir: Annotated[
         str | None,
@@ -375,7 +385,7 @@ def run(
     if audio and no_digest:
         typer.echo("Error: --audio requires the digest stage; remove --no-digest.")
         raise typer.Exit(1)
-    _apply_env_overrides(device, output_dir)
+    _apply_env_overrides(device, output_dir, feeds_file=feeds_file, config_dir=config_dir)
 
     parsed_since, parsed_until = _validate_date_options(days, since, until)
 
@@ -496,11 +506,11 @@ def fetch(
     ] = None,
     feeds_file: Annotated[
         str | None,
-        typer.Option("--feeds", help="Path to a feeds.yaml file (overrides discovery)."),
+        typer.Option("--feeds", help="Path to a feeds.yaml file."),
     ] = None,
     config_dir: Annotated[
         str | None,
-        typer.Option("--config", help="Config directory holding feeds.yaml."),
+        typer.Option("--config", help="Config directory holding feeds.yaml and prompts/."),
     ] = None,
     output_dir: Annotated[
         str | None,
@@ -508,7 +518,7 @@ def fetch(
     ] = None,
 ) -> None:
     """Fetch articles only; print the new run directory path on stdout."""
-    _apply_env_overrides(None, output_dir)
+    _apply_env_overrides(None, output_dir, feeds_file=feeds_file, config_dir=config_dir)
 
     parsed_since, parsed_until = _validate_date_options(days, since, until)
 
@@ -578,8 +588,13 @@ def summarize(
         Path,
         typer.Argument(help="Path to a run directory with source-fetched/ populated."),
     ],
+    config_dir: Annotated[
+        str | None,
+        typer.Option("--config", help="Config directory whose prompts/ overrides apply."),
+    ] = None,
 ) -> None:
     """Summarize fetched articles in an existing run directory."""
+    _apply_env_overrides(None, None, config_dir=config_dir)
     _require_fetched(run_dir)
 
     import asyncio
@@ -739,8 +754,17 @@ def digest(
             help="Render the digest to an Opus audio file after generation.",
         ),
     ] = False,
+    feeds_file: Annotated[
+        str | None,
+        typer.Option("--feeds", help="Path to the feeds.yaml whose categories set the sections."),
+    ] = None,
+    config_dir: Annotated[
+        str | None,
+        typer.Option("--config", help="Config directory holding feeds.yaml and prompts/."),
+    ] = None,
 ) -> None:
     """Generate a digest from an existing pipeline run directory."""
+    _apply_env_overrides(None, None, feeds_file=feeds_file, config_dir=config_dir)
     if not run_dir.is_dir():
         typer.echo(f"Error: '{run_dir}' is not a directory.")
         raise typer.Exit(1)
@@ -940,11 +964,11 @@ def feeds(
     ] = None,
     feeds_file: Annotated[
         str | None,
-        typer.Option("--feeds", help="Path to a feeds.yaml file (overrides discovery)."),
+        typer.Option("--feeds", help="Path to a feeds.yaml file."),
     ] = None,
     config_dir: Annotated[
         str | None,
-        typer.Option("--config", help="Config directory holding feeds.yaml."),
+        typer.Option("--config", help="Config directory holding feeds.yaml and prompts/."),
     ] = None,
 ) -> None:
     """List the configured RSS feeds."""

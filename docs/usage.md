@@ -48,23 +48,18 @@ digest-generator --help
 
 ### Feed configuration
 
-The tool ships with no feeds; you supply them in a `feeds.yaml`. Run [`digest-generator init`](#init-write-a-starter-feedsyaml) to write a starter, or copy [`feeds.example.yaml`](../feeds.example.yaml) yourself. Every command that touches feeds (`run`, `fetch`, `feeds`) resolves the file in this order:
+The tool ships with no feeds; you supply them in a `feeds.yaml`. Run [`digest-generator init`](#init-write-a-starter-feedsyaml) to write a starter, or copy [`feeds.example.yaml`](../feeds.example.yaml) yourself. Every command reads exactly one feeds file, with no search:
 
-1. `--feeds <file>` (or the `FEEDS_FILE` env var)
-2. `<config-dir>/feeds.yaml`, where the config dir comes from `--config` (or `DIGEST_CONFIG`)
-3. `./digest-generator/feeds.yaml` (project-local)
-4. `~/.config/digest-generator/feeds.yaml` (user-level)
+1. `--feeds <file>` (or the `FEEDS_FILE` env var) when given.
+2. Otherwise `feeds.yaml` in the config directory: `--config <dir>` (or `DIGEST_CONFIG`), else `~/.config/digest-generator`.
+
+Nothing is read from the working directory, and a selected file that does not exist is an error. On `run` and `fetch`, `--feeds` and `--config` also select the digest's sections and prompt overrides; `digest` takes the same two flags, and `summarize` takes `--config`.
 
 The file defines your own `categories:` (the digest sections, each an `id` + `title`, in section order) and a `feeds:` list where each feed's `category` matches one of those ids. Category ids and feed names must be unique. Categories are user-defined, so the section taxonomy is whatever you put in the file, and the `-c` / `--content-type` filters take these category ids. A missing or invalid file produces an actionable error pointing back at the example.
 
 ### Prompt overrides
 
-Every LLM stage loads a Markdown prompt template. The bundled templates are generic and topic-neutral, so the tool runs out of the box on any subject. To tune the voice for your topic, drop a `<name>.md` file into a prompts directory; templates you don't override fall back to the bundled baseline. The loader checks, in order:
-
-1. `PROMPTS_DIR`
-2. `<DIGEST_CONFIG>/prompts/` (the `DIGEST_CONFIG` env var only; the `--config` flag selects the feeds file, and prompts do not follow it)
-3. `./digest-generator/prompts/` (project-local)
-4. `~/.config/digest-generator/prompts/` (user-level)
+Every LLM stage loads a Markdown prompt template. The bundled templates are generic and topic-neutral, so the tool runs out of the box on any subject. To tune the voice for your topic, drop a `<name>.md` file into the override directory: `PROMPTS_DIR` when set, else `prompts/` inside the config directory. Templates you don't override use the bundled baseline; overrides never mix across directories.
 
 The template names are `section_system`, `section_merge_system`, `editorial_pass_system`, `intro_system`, `title_system`, `watch_system`, `cluster_system`, and `article_summary_system`. Templates may reference the shared anti-cliché catalog via `{{style:...}}` placeholders, which are expanded on whichever template is used.
 
@@ -76,7 +71,7 @@ Writes the starter feeds config to `~/.config/digest-generator/feeds.yaml`, or t
 # Default location
 digest-generator init
 
-# Project-local config, picked up by discovery from this directory
+# A config directory of your choosing; pass the same --config (or set DIGEST_CONFIG) when you run
 digest-generator init --config ./digest-generator
 ```
 
@@ -116,8 +111,8 @@ digest-generator run --since 2026-03-01 --until 2026-03-15 -c ai
 | `--limit` | `-l` | Max entries per feed | none (all) |
 | `--content-type` | `-c` | Filter by category id (repeatable) | all |
 | `--feed` | `-f` | Filter by feed name (repeatable) | all |
-| `--feeds` | | Path to a `feeds.yaml` file (overrides discovery) | `FEEDS_FILE` env / discovery |
-| `--config` | | Config directory holding `feeds.yaml` | `DIGEST_CONFIG` env / discovery |
+| `--feeds` | | Path to a `feeds.yaml` file | `FEEDS_FILE` env / `<config dir>/feeds.yaml` |
+| `--config` | | Config directory holding `feeds.yaml` and `prompts/` | `DIGEST_CONFIG` env / `~/.config/digest-generator` |
 | `--output-dir` | `-o` | Parent directory for the new run directory | `OUTPUT_DIR` env / `output` |
 | `--device` | | Compute device (`cpu`, `cuda`, `mps`) | `DEVICE` env / `cpu` |
 | `--no-digest` | | Skip digest generation | false |
@@ -140,7 +135,7 @@ digest-generator digest "$RUN_DIR"
 
 ### `summarize` and `label`: Build the Corpus in an Existing Run
 
-Both take a positional `<run_dir>`, read its `source-fetched/`, and skip feeds whose output already exists (delete the file to force a rerun). `summarize` runs the LLM summarizer into `source-summarized/` (concurrency capped by `SUMMARIZER_CONCURRENCY`) and takes no flags. `label` runs the BART-MNLI classifier into `source-labeled/` and accepts `--device`. Run them in either order, one after the other: two processes updating the same `meta.json` at once can corrupt it.
+Both take a positional `<run_dir>`, read its `source-fetched/`, and skip feeds whose output already exists (delete the file to force a rerun). `summarize` runs the LLM summarizer into `source-summarized/` (concurrency capped by `SUMMARIZER_CONCURRENCY`) and takes `--config` for its prompt override. `label` runs the BART-MNLI classifier into `source-labeled/` and accepts `--device`. Run them in either order, one after the other: two processes updating the same `meta.json` at once can corrupt it.
 
 ### `digest <run_dir>`: Generate a Digest
 
@@ -169,6 +164,8 @@ digest-generator digest "$RUN" --seed 42
 | `--watcher-model` | Override the what-to-watch model | `WATCHER_MODEL` env / `gpt-oss:120b-cloud` |
 | `--seed` | Global RNG seed, applied to any stage without a per-stage seed | none |
 | `--audio` | Render the digest to an Opus audio file after generation | false |
+| `--feeds` | `feeds.yaml` whose categories set the sections | `FEEDS_FILE` env / `<config dir>/feeds.yaml` |
+| `--config` | Config directory holding `feeds.yaml` and `prompts/` | `DIGEST_CONFIG` env / `~/.config/digest-generator` |
 
 **Sampling overrides.** The writer, editorial, framer, and watcher stages each take `--<stage>-top-p`, `--<stage>-repetition-penalty`, and `--<stage>-seed` (for example `--writer-top-p 0.9`), which shadow the matching `<STAGE>_*` env vars. Temperature is env-only, and unset knobs fall through to Ollama's defaults.
 
@@ -233,8 +230,8 @@ digest-generator feeds --feeds path/to/feeds.yaml
 | Option | Short | Description | Default |
 |--------|-------|-------------|---------|
 | `--content-type` | `-c` | Filter by category id (repeatable) | all |
-| `--feeds` | | Path to a `feeds.yaml` file (overrides discovery) | `FEEDS_FILE` env / discovery |
-| `--config` | | Config directory holding `feeds.yaml` | `DIGEST_CONFIG` env / discovery |
+| `--feeds` | | Path to a `feeds.yaml` file | `FEEDS_FILE` env / `<config dir>/feeds.yaml` |
+| `--config` | | Config directory holding `feeds.yaml` and `prompts/` | `DIGEST_CONFIG` env / `~/.config/digest-generator` |
 
 ## Caching and Regeneration
 

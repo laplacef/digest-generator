@@ -24,9 +24,11 @@ from digest_generator.api import (
     fetch,
     label,
     render_audio,
+    resolve_feeds,
     run,
     summarize,
 )
+from digest_generator.core.categories import category_registry
 from digest_generator.core.label.io import (
     labeled_path,
     load_labeled,
@@ -646,3 +648,32 @@ class TestRenderAudio:
                 with_digest=False,
                 with_audio=True,
             )
+
+
+_FEEDS_YAML = """\
+categories:
+  - id: ml
+    title: "Machine Learning"
+feeds:
+  - name: one
+    url: https://example.com/one.xml
+    category: ml
+  - name: two
+    url: https://example.com/two.xml
+    category: ml
+"""
+
+
+class TestResolveFeeds:
+    def test_registers_categories_from_the_resolved_file(self, tmp_path):
+        path = tmp_path / "feeds.yaml"
+        path.write_text(_FEEDS_YAML, encoding="utf-8")
+        feeds = resolve_feeds(feeds_file=str(path))
+        assert [f.name for f in feeds] == ["one", "two"]
+        assert category_registry.active.ids == ("ml",)
+
+    def test_unknown_content_type_lists_valid_ids(self, tmp_path):
+        path = tmp_path / "feeds.yaml"
+        path.write_text(_FEEDS_YAML, encoding="utf-8")
+        with pytest.raises(ValueError, match="Valid: ml"):
+            resolve_feeds(content_types=["ai"], feeds_file=str(path))
