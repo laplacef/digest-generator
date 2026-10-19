@@ -22,7 +22,7 @@ from digest_generator.core.digest.types import Cluster, SectionDraft
 from digest_generator.shared.llm.clients import client_registry
 from digest_generator.shared.llm.sampling import SamplingConfig, resolve_ollama_options
 from digest_generator.shared.llm.telemetry import chat_with_logging
-from digest_generator.shared.logging import log_stage, logger
+from digest_generator.shared.logging import current_span, log_stage, logger
 from digest_generator.shared.settings import settings
 
 _SECTION_SYSTEM_PROMPT = load_prompt("section_system")
@@ -148,15 +148,36 @@ class SectionWriter:
                 display_name, articles, section_cross_refs, date_range=date_range
             )
 
+        # A section that still fails after the LLM retries is omitted so the
+        # other sections survive; only a failure of every section propagates.
+        failures: list[tuple[str, Exception]] = []
+
+        def _draft_or_omit(task: _SectionTask) -> str:
+            try:
+                return _draft_one(task)
+            except Exception as e:
+                failures.append((task[0], e))
+                logger.error(
+                    "Section {} failed and is omitted: {}: {}", task[0], type(e).__name__, e
+                )
+                return ""
+
         if len(tasks) == 1:
-            contents = [_draft_one(tasks[0])]
+            contents = [_draft_or_omit(tasks[0])]
         else:
             with ThreadPoolExecutor(max_workers=len(tasks)) as executor:
                 futures = [
-                    executor.submit(contextvars.copy_context().run, _draft_one, task)
+                    executor.submit(contextvars.copy_context().run, _draft_or_omit, task)
                     for task in tasks
                 ]
                 contents = [future.result() for future in futures]
+
+        if failures:
+            if len(failures) == len(tasks):
+                raise failures[0][1]
+            span = current_span()
+            if span is not None:
+                span.set(failed_sections=", ".join(name for name, _ in failures))
 
         drafts: list[SectionDraft] = []
         for (display_name, articles, _), content in zip(tasks, contents, strict=True):

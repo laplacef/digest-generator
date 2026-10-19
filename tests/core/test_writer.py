@@ -18,6 +18,7 @@ from digest_generator.core.digest.stages.writer import (
 from digest_generator.core.digest.types import Cluster, SectionDraft
 from digest_generator.shared.llm import telemetry
 from digest_generator.shared.llm.telemetry import llm_telemetry
+from digest_generator.shared.logging import collect_stage_telemetry
 
 
 @pytest.fixture
@@ -460,6 +461,32 @@ class TestWriteAllFromJson:
 # =============================================================================
 # Concurrent map phase: sections draft in parallel, order + telemetry preserved
 # =============================================================================
+
+
+class TestSectionFailureIsolation:
+    @staticmethod
+    def _chat_failing_for(marker: str):
+        def chat(**kwargs: Any) -> MagicMock:
+            if marker in kwargs["messages"][1]["content"]:
+                msg = "persistent 400"
+                raise RuntimeError(msg)
+            resp = MagicMock()
+            resp.message.content = "## Body\n\nBody."
+            return resp
+
+        return chat
+
+    def test_failed_section_is_omitted_and_recorded(self, writer, sample_articles):
+        writer._client.chat.side_effect = self._chat_failing_for("Security")
+        with collect_stage_telemetry() as sink:
+            drafts = writer.write_all_from_json({"feed1": sample_articles})
+        assert {d.name for d in drafts} == {"AI & Machine Learning", "Engineering"}
+        assert sink["writer"]["failed_sections"] == "Security"
+
+    def test_every_section_failing_raises(self, writer, sample_articles):
+        writer._client.chat.side_effect = RuntimeError("Ollama down")
+        with pytest.raises(RuntimeError, match="Ollama down"):
+            writer.write_all_from_json({"feed1": sample_articles})
 
 
 class TestConcurrentDrafting:

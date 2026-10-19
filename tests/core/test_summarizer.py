@@ -152,6 +152,26 @@ class TestFallback:
         result = asyncio.run(summarizer.summarize_entry(sample_entries[0]))
         assert result.summary == "Truncated head of article one."
 
+    def test_llm_error_falls_back(self, summarizer, sample_entries):
+        summarizer._client.chat.side_effect = RuntimeError("upstream 500")
+        result = asyncio.run(summarizer.summarize_entry(sample_entries[0]))
+        assert result.summary == "Truncated head of article one."
+
+    def test_one_failing_entry_keeps_the_rest(self, summarizer, sample_entries):
+        failing = sample_entries[0].title
+
+        def chat(**kwargs):
+            if failing in kwargs["messages"][1]["content"]:
+                msg = "upstream 500"
+                raise RuntimeError(msg)
+            return _mock_response("Good summary.")
+
+        summarizer._client.chat.side_effect = chat
+        results = asyncio.run(summarizer.summarize_entries(sample_entries))
+        assert len(results) == len(sample_entries)
+        assert results[0].summary == "Truncated head of article one."
+        assert all(r.summary == "Good summary." for r in results[1:])
+
 
 # =============================================================================
 # user-prompt format: XML-tag mirror of writer._format_articles
