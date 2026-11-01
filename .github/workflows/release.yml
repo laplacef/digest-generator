@@ -2,6 +2,8 @@ name: Release
 
 # Tagging vX.Y.Z builds the distributions, publishes them to PyPI via OIDC
 # trusted publishing, and cuts a GitHub Release with the changelog entry.
+# A pre-release tag (vX.Y.Z-rc.N, -beta.N, -alpha.N) takes the same path and
+# lands on GitHub as a pre-release; PyPI flags it as one from its version.
 #
 # Trusted publishing setup (one-time, no API token needed):
 #   1. On PyPI, add a trusted publisher for project "digest-generator":
@@ -30,7 +32,10 @@ jobs:
 
       - name: Verify tag matches package version
         run: |
-          tag="${GITHUB_REF_NAME#v}"
+          # The tag is SemVer and pyproject.toml is PEP 440, so a pre-release
+          # tag maps across before comparing: 0.4.0-rc.1 becomes 0.4.0rc1.
+          tag=$(printf '%s\n' "${GITHUB_REF_NAME#v}" \
+            | sed -E 's/-alpha\.([0-9]+)$/a\1/; s/-beta\.([0-9]+)$/b\1/; s/-rc\.([0-9]+)$/rc\1/')
           version=$(grep -m1 '^version = ' pyproject.toml | sed -E 's/version = "(.*)"/\1/')
           if [ "$tag" != "$version" ]; then
             echo "Tag $GITHUB_REF_NAME ($tag) does not match pyproject version $version" >&2
@@ -97,7 +102,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          prerelease=()
+          if [[ "$TAG" == *-* ]]; then
+            prerelease=(--prerelease)
+          fi
           gh release create "$TAG" \
             --title "$TAG" \
             --notes-file release_notes.md \
+            "${prerelease[@]}" \
             dist/*
