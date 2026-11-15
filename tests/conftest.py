@@ -2,9 +2,12 @@
 
 Tests stay hermetic against host config in two layers:
 
-- Stage modules load their prompt templates at import, before any fixture
-  runs, so ``PROMPTS_DIR`` points at an empty directory before the package is
-  imported. Every template captured at collection is the bundled baseline.
+- Before the package is imported, the credentials are blanked, since tests
+  never need them and a printed ``Settings`` repr (a failed assertion, a
+  ``monkeypatch`` error) would otherwise show the ``.env`` values. Stage
+  modules also load their prompt templates at import, so ``PROMPTS_DIR``
+  points at an empty directory, and every template captured at collection is
+  the bundled baseline.
 - Two autouse fixtures cover calls made during a test. ``default_categories``
   injects a known category set into ``category_registry`` so stages resolve
   sections without reading a real ``feeds.yaml``, and ``bundled_prompts``
@@ -17,6 +20,8 @@ Tests that exercise loading or a specific set/override it locally.
 import os
 import tempfile
 
+os.environ["HF_TOKEN"] = ""
+os.environ["OLLAMA_API_KEY"] = ""
 os.environ["PROMPTS_DIR"] = tempfile.mkdtemp(prefix="digest-generator-test-prompts-")
 
 import pytest
