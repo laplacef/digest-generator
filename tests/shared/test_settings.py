@@ -2,7 +2,7 @@
 
 from unittest.mock import patch
 
-from digest_generator.shared.settings import Settings
+from digest_generator.shared.settings import Settings, settings
 
 
 def _clean_settings(**overrides):
@@ -135,3 +135,14 @@ class TestSettingsEnvOverride:
         s = _clean_settings()
         assert s.audio_enabled is True
         assert s.audio_voice_model == "en_GB-alan-medium"
+
+
+class TestSuiteSettings:
+    """The settings singleton every other test runs against."""
+
+    def test_holds_no_credentials(self):
+        """conftest blanks the credentials, so a printed Settings repr can't show one."""
+        credentials = [n for n in Settings.model_fields if n.endswith(("_token", "_key"))]
+        assert set(credentials) >= {"hf_token", "ollama_api_key"}
+        # Collect names rather than asserting on values, so a failure prints no secret.
+        assert [n for n in credentials if getattr(settings, n)] == []
