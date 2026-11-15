@@ -6,6 +6,7 @@ client, and a ``_mock_response`` helper for the chat shape.
 """
 
 import asyncio
+import threading
 from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
@@ -74,11 +75,23 @@ class TestSummarizeEntriesFanOut:
         assert len(result) == 2
 
     def test_preserves_input_order(self, summarizer, sample_entries):
-        summarizer._client.chat.side_effect = [
-            _mock_response("Summary A."),
-            _mock_response("Summary B."),
-        ]
+        """The second entry's call comes in first, and results keep input order."""
+        first = sample_entries[0].title
+        second_called = threading.Event()
+        first_saw_second: list[bool] = []
+
+        def chat(**kwargs):
+            # Calls run in separate threads, so each response is tied to its
+            # entry by the prompt, never by the order the calls arrive in.
+            if first in kwargs["messages"][1]["content"]:
+                first_saw_second.append(second_called.wait(timeout=5))
+                return _mock_response("Summary A.")
+            second_called.set()
+            return _mock_response("Summary B.")
+
+        summarizer._client.chat.side_effect = chat
         result = asyncio.run(summarizer.summarize_entries(sample_entries))
+        assert first_saw_second == [True]
         assert result[0].entry is sample_entries[0]
         assert result[1].entry is sample_entries[1]
         assert result[0].summary == "Summary A."
