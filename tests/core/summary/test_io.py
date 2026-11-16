@@ -41,7 +41,7 @@ def _summary(
         content_type=content_type,
         fetched_at=fetched_at,
     )
-    return Summary(entry=entry, summary="extracted fact", length=14, topics=[])
+    return Summary(entry=entry, summary="extracted fact", length=14)
 
 
 class TestSaveSummarized:

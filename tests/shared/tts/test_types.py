@@ -21,15 +21,6 @@ class TestVoiceConfig:
         assert v.model_path == Path("/tmp/amy.onnx")
         assert v.sample_rate == 22050
 
-    def test_config_path_appends_dot_json(self):
-        """Piper sidecar lives at ``<model>.onnx.json``."""
-        v = VoiceConfig(
-            voice_id="en_US-amy-medium",
-            model_path=Path("/cache/en_US-amy-medium.onnx"),
-            sample_rate=22050,
-        )
-        assert v.config_path == Path("/cache/en_US-amy-medium.onnx.json")
-
     def test_frozen(self):
         """VoiceConfig is immutable so the registry cache can't be mutated."""
         v = VoiceConfig(

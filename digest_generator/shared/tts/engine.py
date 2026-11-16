@@ -83,7 +83,7 @@ def synthesize_to_wav(
             looking up ``piper`` on ``$PATH``.
         sentence_silence_s: Pause duration (seconds) inserted at every
             sentence terminator. ``None`` lets Piper use its compiled
-            default (~0.2s). Passed through as ``--sentence-silence``.
+            default (0.0 in piper-tts 1.4.2). Passed through as ``--sentence-silence``.
 
     Returns:
         Raw WAV bytes ready to pipe into ffmpeg.

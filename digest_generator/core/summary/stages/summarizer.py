@@ -124,7 +124,7 @@ class ContentSummarizer:
         if not text:
             text = self._fallback_summary(entry)
             logger.warning("summarizer.fallback entry={!r} chars={}", entry.title, len(text))
-        return Summary(entry=entry, summary=text, length=len(text), topics=[])
+        return Summary(entry=entry, summary=text, length=len(text))
 
     def _call_llm(self, user_prompt: str) -> str:
         options = resolve_ollama_options(

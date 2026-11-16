@@ -107,12 +107,6 @@ class TestSummarizeEntriesFanOut:
         result = asyncio.run(summarizer.summarize_entries(sample_entries[:1]))
         assert result[0].summary == "Trimmed."
 
-    def test_topics_initialized_empty(self, summarizer, sample_entries):
-        """Classifier populates topics later, so summarizer leaves them empty."""
-        summarizer._client.chat.return_value = _mock_response("Fact.")
-        result = asyncio.run(summarizer.summarize_entries(sample_entries[:1]))
-        assert result[0].topics == []
-
     def test_length_matches_summary(self, summarizer, sample_entries):
         summarizer._client.chat.return_value = _mock_response("Twelve chars.")
         result = asyncio.run(summarizer.summarize_entries(sample_entries[:1]))

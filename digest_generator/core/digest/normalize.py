@@ -194,7 +194,6 @@ _ENTITY_CASING = {
     "Open AI": "OpenAI",
     "OpenAi": "OpenAI",
     "Github": "GitHub",
-    "GitHub": "GitHub",
     "Pytorch": "PyTorch",
     "Tensorflow": "TensorFlow",
     "Deepmind": "DeepMind",

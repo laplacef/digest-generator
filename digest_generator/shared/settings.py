@@ -161,9 +161,6 @@ class Settings(BaseSettings):
     clusterer_seed: int | None = None
 
     # -- Audio (TTS narration: opt-in terminal stage after the digest composer) --
-    # Gates the audio renderer. Default off so `digest-generator run` stays cheap for
-    # dev iteration; pass --audio explicitly to enable it.
-    audio_enabled: bool = False
     # Piper voice id (e.g. ``en_US-amy-medium``). Resolved to the matching
     # path under the official ``rhasspy/piper-voices`` HuggingFace repo on
     # first use.

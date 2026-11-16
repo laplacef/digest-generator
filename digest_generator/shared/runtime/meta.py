@@ -22,6 +22,8 @@ from digest_generator.shared.logging import logger
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from digest_generator.shared.llm.sampling import SeedSource
+
 
 SCHEMA_VERSION = 2
 
@@ -71,9 +73,6 @@ class SamplingLayer:
     top_p: float | None = None
     repetition_penalty: float | None = None
     seed: int | None = None
-
-
-SeedSource = Literal["user", "settings", "cli", "random"]
 
 
 @dataclass
@@ -169,14 +168,6 @@ _V2_KEY_ORDER: tuple[str, ...] = (
     "digest",
 )
 
-# Flat v1 keys that duplicate their nested v2 counterpart and should be
-# stripped on every write. ``<stage>_revision`` keys promote into the
-# nested ``revisions`` map instead of being dropped outright.
-_LEGACY_FLAT_REVISION_KEYS: dict[str, str] = {
-    "summarizer_revision": "summarizer",
-    "topic_revision": "topic",
-}
-
 
 def _to_dict(meta: RunMeta) -> dict[str, Any]:
     """Serialize ``RunMeta`` to a JSON-friendly dict in canonical v2 order.
@@ -207,24 +198,17 @@ def _to_dict(meta: RunMeta) -> dict[str, Any]:
 def _normalize_v2(data: dict[str, Any]) -> dict[str, Any]:
     """Return a fresh dict containing only v2 keys, in canonical order.
 
-    Promotes legacy flat ``<stage>_revision`` values into the nested
-    ``revisions`` map (no overwrite: the nested value wins on conflict),
-    drops every other legacy v1 key (``<stage>_model``, ``digest_title``,
-    ``digest_filename``, etc.), and stamps ``schema_version``. Patch
-    callers run this at the end of their read/modify/write cycle so the
-    on-disk file converges on the v2 shape regardless of the input
-    state.
+    Drops every key outside the v2 schema, including the flat v1 keys
+    (``<stage>_model``, ``<stage>_revision``, ``digest_title``,
+    ``digest_filename``), and stamps ``schema_version``. ``revisions`` is
+    always present, empty when the input has none. Patch callers run this
+    at the end of their read/modify/write cycle so the on-disk file
+    converges on the v2 shape regardless of the input state.
     """
-    revisions = dict(data.get("revisions") or {})
-    for legacy_key, target in _LEGACY_FLAT_REVISION_KEYS.items():
-        legacy_value = data.get(legacy_key)
-        if legacy_value and target not in revisions:
-            revisions[target] = legacy_value
-
     normalized: dict[str, Any] = {"schema_version": SCHEMA_VERSION}
     for key in _V2_KEY_ORDER[1:]:
         if key == "revisions":
-            normalized[key] = revisions
+            normalized[key] = dict(data.get("revisions") or {})
         elif key in data:
             normalized[key] = data[key]
     return normalized
@@ -263,8 +247,9 @@ def _load_meta_or_empty(meta_path: Path) -> dict[str, Any]:
     ``_write_initial_meta``) can still incrementally patch the file. The
     patch path is the load-bearing creator in that workflow; downstream
     consumers see a normalized v2 file with whatever blocks the patches
-    contributed, just without the run-level fields (``run_id``, ``feeds``,
-    ``since`` and ``until``) that only ``_write_initial_meta`` populates.
+    contributed, just without the run-level fields (``timestamp``,
+    ``since``, ``until``, ``feed_count``, and the rest of ``RunMeta``) that
+    only ``_write_initial_meta`` populates.
     """
     if not meta_path.exists():
         return {}

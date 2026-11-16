@@ -186,9 +186,7 @@ class TestSummarize:
 
         summarizer = MagicMock()
         summarizer.summarize_entries = AsyncMock(
-            return_value=[
-                Summary(entry=_entry(now), summary="extracted fact", length=14, topics=[])
-            ]
+            return_value=[Summary(entry=_entry(now), summary="extracted fact", length=14)]
         )
 
         asyncio.run(summarize(run_dir=tmp_path, summarizer=summarizer))
@@ -202,7 +200,7 @@ class TestSummarize:
         save_summarized(
             tmp_path,
             "openai-news",
-            [Summary(entry=_entry(now), summary="prior", length=5, topics=[])],
+            [Summary(entry=_entry(now), summary="prior", length=5)],
         )
 
         summarizer = MagicMock()
@@ -292,7 +290,7 @@ class TestLoadDigestInput:
         save_summarized(
             tmp_path,
             "openai-news",
-            [Summary(entry=entry, summary="extracted", length=9, topics=[])],
+            [Summary(entry=entry, summary="extracted", length=9)],
         )
         save_labeled(
             tmp_path,
@@ -319,8 +317,8 @@ class TestLoadDigestInput:
             tmp_path,
             "openai-news",
             [
-                Summary(entry=e1, summary="sum1", length=4, topics=[]),
-                Summary(entry=e2, summary="sum2", length=4, topics=[]),
+                Summary(entry=e1, summary="sum1", length=4),
+                Summary(entry=e2, summary="sum2", length=4),
             ],
         )
         # Classifier persisted in REVERSED order; URL keying makes it harmless.
@@ -347,7 +345,7 @@ class TestLoadDigestInput:
         save_summarized(
             tmp_path,
             "openai-news",
-            [Summary(entry=entry, summary="s", length=1, topics=[])],
+            [Summary(entry=entry, summary="s", length=1)],
         )
         # source-labeled/ deliberately not written.
 
@@ -369,7 +367,7 @@ class TestRunComposition:
         fetcher.fetch_entries = AsyncMock(return_value=[_entry(now)])
         summarizer = MagicMock()
         summarizer.summarize_entries = AsyncMock(
-            return_value=[Summary(entry=_entry(now), summary="s", length=1, topics=[])]
+            return_value=[Summary(entry=_entry(now), summary="s", length=1)]
         )
         classifier = MagicMock()
         classifier.classify_entries = MagicMock(
@@ -394,7 +392,7 @@ class TestRunComposition:
         fetcher.fetch_entries = AsyncMock(return_value=[_entry(now)])
         summarizer = MagicMock()
         summarizer.summarize_entries = AsyncMock(
-            return_value=[Summary(entry=_entry(now), summary="s", length=1, topics=[])]
+            return_value=[Summary(entry=_entry(now), summary="s", length=1)]
         )
         classifier = MagicMock()
         classifier.classify_entries = MagicMock(
@@ -419,7 +417,7 @@ class TestRunComposition:
         fetcher.fetch_entries = AsyncMock(return_value=[_entry(now)])
         summarizer = MagicMock()
         summarizer.summarize_entries = AsyncMock(
-            return_value=[Summary(entry=_entry(now), summary="s", length=1, topics=[])]
+            return_value=[Summary(entry=_entry(now), summary="s", length=1)]
         )
         classifier = MagicMock()
         classifier.classify_entries = MagicMock(
@@ -465,7 +463,7 @@ class TestDigestEntryPoint:
         save_summarized(
             tmp_path,
             "openai-news",
-            [Summary(entry=entry, summary="s", length=1, topics=[])],
+            [Summary(entry=entry, summary="s", length=1)],
         )
         save_labeled(
             tmp_path,

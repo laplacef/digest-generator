@@ -32,8 +32,3 @@ class VoiceConfig:
     voice_id: str
     model_path: Path
     sample_rate: int
-
-    @property
-    def config_path(self) -> Path:
-        """Sidecar JSON config path that Piper expects next to the ONNX file."""
-        return self.model_path.with_suffix(self.model_path.suffix + ".json")

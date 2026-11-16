@@ -35,8 +35,8 @@ def save_summarized(run_dir: Path, feed_name: str, summaries: list[Summary]) -> 
     ``summary_length``, plus ``content_head`` / ``content_type`` /
     ``fetched_at`` only when set. Atomic via tempfile + rename.
 
-    Topics from ``Summary.topics`` are NOT serialized; they live in
-    the ``source-labeled/`` artifact and join back in via
+    Topic labels are not part of this file; they live in the
+    ``source-labeled/`` artifact and join back in via
     ``api._load_digest_input`` at digest read time.
     """
     target = summarized_path(run_dir, feed_name)

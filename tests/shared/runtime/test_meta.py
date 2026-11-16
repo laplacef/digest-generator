@@ -263,12 +263,12 @@ class TestNormalizeV2OnPatch:
         assert data["digest"]["title"] == "New Title"
         assert data["feed_count"] == 5
 
-    def test_digest_patch_promotes_topic_revision_into_revisions(self, tmp_path):
+    def test_digest_patch_drops_flat_revision_keys(self, tmp_path):
         meta_path = tmp_path / "meta.json"
         meta_path.write_text(json.dumps({"topic_revision": "abc123", "summarizer_revision": ""}))
         update_run_meta_digest(tmp_path, "T", "f.md")
         data = json.loads(meta_path.read_text())
-        assert data["revisions"] == {"topic": "abc123"}
+        assert data["revisions"] == {}
         assert "topic_revision" not in data
         assert "summarizer_revision" not in data
 
@@ -284,9 +284,9 @@ class TestNormalizeV2OnPatch:
         assert data["schema_version"] == 2
         assert data["totals"] == {"llm_calls": 17}
 
-    def test_nested_revisions_wins_over_legacy_flat(self, tmp_path):
-        # If both forms are present (mid-migration corner case), the nested
-        # value is authoritative; legacy flat is dropped silently.
+    def test_nested_revisions_survive_a_flat_key(self, tmp_path):
+        # The nested map is the only source of revisions; a flat key beside
+        # it is dropped without touching the nested value.
         meta_path = tmp_path / "meta.json"
         meta_path.write_text(json.dumps({"revisions": {"topic": "new"}, "topic_revision": "old"}))
         update_run_meta_digest(tmp_path, "T", "f.md")

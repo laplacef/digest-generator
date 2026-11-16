@@ -192,14 +192,12 @@ class Entry:
 
 @dataclass
 class Summary:
-    """An article summary with its source entry, generated text, and topic labels.
+    """An article summary with its source entry and generated text.
 
-    ``topics`` carries the topic-stage output. Future stages add
-    sibling fields (``sentiment: Label | None`` for a sentiment stage;
-    ``entailment: list[Label]`` for a per-claim entailment stage).
+    Topic labels are not carried here: the label stage writes them to its
+    own URL-keyed artifact, and the digest joins them at read time.
     """
 
     entry: Entry
     summary: str
     length: int
-    topics: list[Label]

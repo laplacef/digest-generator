@@ -91,7 +91,6 @@ class TestSettingsDefaults:
 
     def test_audio_defaults(self):
         s = _clean_settings()
-        assert s.audio_enabled is False
         assert s.audio_voice_model == "en_US-amy-medium"
         # Pin matches rhasspy/piper-voices v1.0.0 tag; see audio_voice_revision docstring.
         expected = (
@@ -141,10 +140,9 @@ class TestSettingsEnvOverride:
         assert s.topic_min_score == 0.998
         assert s.topic_articles_per_batch == 8
 
-    @patch.dict("os.environ", {"AUDIO_ENABLED": "true", "AUDIO_VOICE_MODEL": "en_GB-alan-medium"})
+    @patch.dict("os.environ", {"AUDIO_VOICE_MODEL": "en_GB-alan-medium"})
     def test_audio_overrides(self):
         s = _clean_settings()
-        assert s.audio_enabled is True
         assert s.audio_voice_model == "en_GB-alan-medium"
 
 
