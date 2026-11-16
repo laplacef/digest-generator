@@ -45,6 +45,7 @@ dependencies = [
     "beautifulsoup4>=4.14.3",
     "cloudscraper>=1.2.71",
     "feedparser>=6.0.12",
+    "gliclass>=0.1.21,<0.2",
     "loguru>=0.7.3",
     "markdown-it-py>=4.0.0",
     "ollama>=0.6.1",
@@ -179,6 +180,7 @@ strict_optional = true
 module = [
     "feedparser.*",
     "cloudscraper.*",
+    "gliclass.*",
     "transformers.*",
     "torch.*",
     "typer.*",

@@ -2,6 +2,9 @@
 
 from unittest.mock import patch
 
+import pytest
+from pydantic import ValidationError
+
 from digest_generator.shared.settings import Settings, settings
 
 
@@ -32,9 +35,10 @@ class TestSettingsDefaults:
 
     def test_classifier_defaults(self):
         s = _clean_settings()
-        assert s.topic_model == "facebook/bart-large-mnli"
-        assert s.topic_threshold == 0.5
-        assert s.topic_max_length == 512
+        assert s.topic_model == "knowledgator/gliclass-base-v3.0"
+        assert s.topic_min_score == 0.998
+        assert s.topic_max_length == 1024
+        assert s.topic_articles_per_batch == 8
 
     def test_ollama_defaults(self):
         s = _clean_settings()
@@ -50,17 +54,17 @@ class TestSettingsDefaults:
 
     def test_editorial_defaults(self):
         s = _clean_settings()
-        assert s.editorial_model == "gpt-oss:120b-cloud"
+        assert s.editorial_model == "gemma4:31b-cloud"
         assert s.editorial_temperature == 0.4
 
     def test_framer_defaults(self):
         s = _clean_settings()
-        assert s.framer_model == "gpt-oss:120b-cloud"
+        assert s.framer_model == "gemma4:31b-cloud"
         assert s.framer_temperature == 0.4
 
     def test_watcher_defaults(self):
         s = _clean_settings()
-        assert s.watcher_model == "gpt-oss:120b-cloud"
+        assert s.watcher_model == "gemma4:31b-cloud"
         assert s.watcher_temperature == 0.4
 
     def test_fetcher_defaults(self):
@@ -125,10 +129,17 @@ class TestSettingsEnvOverride:
         s = _clean_settings()
         assert s.days_back == 14
 
-    @patch.dict("os.environ", {"TOPIC_THRESHOLD": "0.8"})
-    def test_topic_threshold_override(self):
+    @patch.dict("os.environ", {"TOPIC_MIN_SCORE": "0.8"})
+    def test_topic_min_score_override(self):
         s = _clean_settings()
-        assert s.topic_threshold == 0.8
+        assert s.topic_min_score == 0.8
+
+    @patch.dict("os.environ", {"TOPIC_THRESHOLD": "0.5", "TOPIC_BATCH_SIZE": "128"})
+    def test_ignores_the_0_3_topic_names(self):
+        """The 0.3.0 names held values on another scale, so they no longer apply."""
+        s = _clean_settings()
+        assert s.topic_min_score == 0.998
+        assert s.topic_articles_per_batch == 8
 
     @patch.dict("os.environ", {"AUDIO_ENABLED": "true", "AUDIO_VOICE_MODEL": "en_GB-alan-medium"})
     def test_audio_overrides(self):
@@ -146,3 +157,13 @@ class TestSuiteSettings:
         assert set(credentials) >= {"hf_token", "ollama_api_key"}
         # Collect names rather than asserting on values, so a failure prints no secret.
         assert [n for n in credentials if getattr(settings, n)] == []
+
+
+class TestSettingsValidation:
+    """Verify values the pipeline can't run with are rejected when settings load."""
+
+    @pytest.mark.parametrize("value", ["0", "-4"])
+    def test_topic_articles_per_batch_must_be_positive(self, value):
+        env = {"TOPIC_ARTICLES_PER_BATCH": value}
+        with patch.dict("os.environ", env), pytest.raises(ValidationError):
+            _clean_settings()

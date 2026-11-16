@@ -5,6 +5,8 @@ The label io writes a single artifact per feed:
 """
 
 import json
+import subprocess
+import sys
 
 import pytest
 
@@ -142,3 +144,16 @@ class TestIterLabeled:
         bad.write_text(json.dumps([{"missing": "url-key"}]))
         feeds = {feed for _, feed, _ in iter_labeled(tmp_path)}
         assert feeds == {"good-feed"}
+
+
+class TestImportCost:
+    def test_io_import_leaves_the_model_stack_unloaded(self, tmp_path):
+        """The digest path reads labels through io, which must not load torch or gliclass."""
+        code = (
+            "import sys, digest_generator.core.label.io; "
+            "print(sorted({'torch', 'transformers', 'gliclass'} & set(sys.modules)))"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code], cwd=tmp_path, capture_output=True, text=True, check=True
+        )
+        assert result.stdout.strip() == "[]"

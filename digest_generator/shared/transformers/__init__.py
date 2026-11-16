@@ -1,22 +1,11 @@
-"""HuggingFace transformer serving: in-process PyTorch via the transformers library.
+"""HuggingFace models run in-process with PyTorch.
 
-Mirror of ``digest_generator.shared.llm`` (Ollama HTTP) and ``digest_generator.shared.tts``
-(Piper subprocess). All three cluster engine-specific model-serving
-infrastructure that's shared across ``core/`` consumers: ``llm/`` for
-Ollama clients used by the summarizer and digest stages,
-``transformers/`` for HuggingFace transformer models loaded in-process
-(the topic classifier, with additional label stages such as sentiment
-and entailment slotting in as siblings), and ``tts/`` for Piper
-text-to-speech used by the audio renderer.
+One of three serving-engine packages, beside ``shared.llm`` (Ollama over
+HTTP) and ``shared.tts`` (Piper subprocess). Hub authentication lives in
+``shared.hf_hub`` because ``tts`` downloads from the Hub too.
 
-HuggingFace Hub authentication is shared across both `transformers/`
-and `tts/` and lives at ``digest_generator.shared.hf_hub`` (a sibling module,
-not inside this package), because Hub auth is orthogonal to the serving
-engine consuming the downloaded artifact.
-
-- ``types``: ``DeviceType``, ``ModelConfig``, the device enum and the
-  HF model-config dataclass with chainable ``load()``.
-- ``registry``: ``ModelRegistry`` + ``model_registry`` singleton, with lazy
-  ``@cached_property`` access to pinned HF models (``topic`` for
-  BART-MNLI, with ``sentiment`` and ``entailment`` slotting in as siblings).
+- ``types``: ``DeviceType`` and ``ModelConfig``, the HF model config with a
+  chainable ``load()``.
+- ``registry``: the ``model_registry`` singleton, whose ``topic`` property
+  loads the pinned GLiClass topic model on first access.
 """

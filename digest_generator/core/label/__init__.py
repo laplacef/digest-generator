@@ -1,16 +1,10 @@
 """Label domain: produces ``Label`` objects from ``Entry`` input.
 
-Mirrors ``digest_generator.core.digest`` and ``digest_generator.core.summary`` in shape:
-per-stage classes live under ``stages/``, per-feed persistence in
-``io.py``. The stage is ``TopicClassifier`` (zero-shot topic
-classification via BART-MNLI); additional passes (sentiment, claim
-entailment) slot in as siblings under ``stages/`` with their own
-enums (``SentimentType``, ``EntailmentType``).
+The stage is ``TopicClassifier`` in ``stages/topic.py``, and ``io.py`` holds
+the URL-keyed per-feed persistence (``save_labeled``, ``load_labeled``,
+``iter_labeled``).
 
-Per-stage IO (``save_labeled`` / ``load_labeled`` / ``iter_labeled``
-operating on URL-keyed Label lists) is in ``digest_generator.core.label.io``.
+This package does not re-export the stage: importing ``stages.topic`` loads
+torch and gliclass, and the digest path imports ``io`` without needing
+either.
 """
-
-from digest_generator.core.label.stages.topic import TopicClassifier
-
-__all__ = ["TopicClassifier"]

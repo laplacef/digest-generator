@@ -3,13 +3,13 @@
 [![Python](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/laplacef/digest-generator/blob/main/LICENSE.md)
 
-Digest Generator is a Python pipeline that aggregates articles from RSS feeds you define, generates fact-dense per-article summaries via an LLM, classifies them with zero-shot NLI, and produces a Markdown digest via Ollama. Feeds, sections, and prompts are all user-supplied; the tool ships generic baselines so it runs on any topic out of the box.
+Digest Generator is a Python pipeline that aggregates articles from RSS feeds you define, generates fact-dense per-article summaries via an LLM, tags their topics with a zero-shot GLiClass classifier, and produces a Markdown digest via Ollama. Feeds, sections, and prompts are all user-supplied; the tool ships generic baselines so it runs on any topic out of the box.
 
 ## How It Works
 
 A run has two halves that share one run directory:
 
-1. **Corpus.** Fetch every feed, then summarize each article with an LLM and classify its topics with BART-MNLI, in parallel.
+1. **Corpus.** Fetch every feed, then summarize each article with an LLM and classify its topics with a zero-shot GLiClass model, in parallel.
 2. **Digest.** Cluster articles into stories, draft each section, edit it, write the title and intro, pick what to watch, and compose `<date>.md`.
 
 `digest-generator run` does both. `run --no-digest` stops after the corpus, and `digest <run_dir>` turns an existing corpus into a digest. Each stage caches its output, so re-running against the same directory skips finished work. The stage-by-stage view is in [`docs/usage.md`](https://github.com/laplacef/digest-generator/blob/main/docs/usage.md).
@@ -18,7 +18,7 @@ A run has two halves that share one run directory:
 
 - **Python.** Version 3.13 or later.
 - **Ollama.** The summarizer and every digest stage call [Ollama](https://ollama.com). The default models (`gemma4:31b-cloud`, `gpt-oss:120b-cloud`) are Ollama cloud models: set `OLLAMA_API_KEY` to call ollama.com directly, or use a local Ollama signed in to an Ollama account. To stay fully local, pull local models and set the six `*_MODEL` variables listed in [`.env.example`](https://github.com/laplacef/digest-generator/blob/main/.env.example).
-- **HuggingFace token.** `run` and `label` log in to the HuggingFace Hub before the topic classifier loads, so they fail without `HF_TOKEN` ([create a token](https://huggingface.co/settings/tokens)). The classifier model (BART-MNLI, about 1.6 GB) downloads on first use.
+- **HuggingFace token.** `run` and `label` log in to the HuggingFace Hub before the topic classifier loads, so they fail without `HF_TOKEN` ([create a token](https://huggingface.co/settings/tokens)). The classifier model (GLiClass, about 750 MB) downloads on first use.
 - **Optional extras.** Piper and ffmpeg for audio rendering, and an NVIDIA or Apple Silicon GPU for the classifier. Both are covered in [`docs/setup.md`](https://github.com/laplacef/digest-generator/blob/main/docs/setup.md).
 
 ## Installation

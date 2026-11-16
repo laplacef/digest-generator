@@ -135,7 +135,7 @@ digest-generator digest "$RUN_DIR"
 
 ### `summarize` and `label`: Build the Corpus in an Existing Run
 
-Both take a positional `<run_dir>`, read its `source-fetched/`, and skip feeds whose output already exists (delete the file to force a rerun). `summarize` runs the LLM summarizer into `source-summarized/` (concurrency capped by `SUMMARIZER_CONCURRENCY`) and takes `--config` for its prompt override. `label` runs the BART-MNLI classifier into `source-labeled/` and accepts `--device`. Run them in either order, one after the other: two processes updating the same `meta.json` at once can corrupt it.
+Both take a positional `<run_dir>`, read its `source-fetched/`, and skip feeds whose output already exists (delete the file to force a rerun). `summarize` runs the LLM summarizer into `source-summarized/` (concurrency capped by `SUMMARIZER_CONCURRENCY`) and takes `--config` for its prompt override. `label` runs the GLiClass topic classifier into `source-labeled/` and accepts `--device`. Run them in either order, one after the other: two processes updating the same `meta.json` at once can corrupt it.
 
 ### `digest <run_dir>`: Generate a Digest
 
@@ -159,9 +159,9 @@ digest-generator digest "$RUN" --seed 42
 |-----------------|-------------|---------|
 | `RUN_DIR` | Path to run directory (positional) | required |
 | `--writer-model` | Override the section-writer model | `WRITER_MODEL` env / `gemma4:31b-cloud` |
-| `--editorial-model` | Override the editorial-pass model | `EDITORIAL_MODEL` env / `gpt-oss:120b-cloud` |
-| `--framer-model` | Override the title + intro model | `FRAMER_MODEL` env / `gpt-oss:120b-cloud` |
-| `--watcher-model` | Override the what-to-watch model | `WATCHER_MODEL` env / `gpt-oss:120b-cloud` |
+| `--editorial-model` | Override the editorial-pass model | `EDITORIAL_MODEL` env / `gemma4:31b-cloud` |
+| `--framer-model` | Override the title + intro model | `FRAMER_MODEL` env / `gemma4:31b-cloud` |
+| `--watcher-model` | Override the what-to-watch model | `WATCHER_MODEL` env / `gemma4:31b-cloud` |
 | `--seed` | Global RNG seed, applied to any stage without a per-stage seed | none |
 | `--audio` | Render the digest to an Opus audio file after generation | false |
 | `--feeds` | `feeds.yaml` whose categories set the sections | `FEEDS_FILE` env / `<config dir>/feeds.yaml` |
@@ -406,9 +406,9 @@ All settings are read from environment variables or a `.env` file in the working
 |-------|----------------|---------|
 | Summarizer | `SUMMARIZER_MODEL` | `gemma4:31b-cloud` |
 | Writer | `WRITER_MODEL` | `gemma4:31b-cloud` |
-| Editor | `EDITORIAL_MODEL` | `gpt-oss:120b-cloud` |
-| Framer | `FRAMER_MODEL` | `gpt-oss:120b-cloud` |
-| Watcher | `WATCHER_MODEL` | `gpt-oss:120b-cloud` |
+| Editor | `EDITORIAL_MODEL` | `gemma4:31b-cloud` |
+| Framer | `FRAMER_MODEL` | `gemma4:31b-cloud` |
+| Watcher | `WATCHER_MODEL` | `gemma4:31b-cloud` |
 | Clusterer | `CLUSTERER_MODEL` | `gpt-oss:120b-cloud` |
 
 The `-cloud` models run on Ollama's cloud; [`setup.md`](./setup.md#4-connect-to-ollama) covers connecting to them or switching to local models. Setting `FRAMER_MODEL`, `WATCHER_MODEL`, or `CLUSTERER_MODEL` to an empty value falls back to `WRITER_MODEL`.

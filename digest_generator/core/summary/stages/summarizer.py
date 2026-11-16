@@ -1,9 +1,8 @@
 """LLM-driven fact-extraction summarizer for article entries.
 
 A constrained LLM call (Ollama) produces a fact-dense 2-4 sentence
-summary per article. The summary string is consumed by
-``TopicClassifier`` (zero-shot NLI tagging) and surfaces in the digest
-writer's ``<summary>`` source-signal slot. The output schema
+summary per article. The summary string surfaces in the digest writer's
+``<summary>`` source-signal slot. The output schema
 (``Summary.summary`` as a single string) keeps the per-feed JSON files
 simple and stable across runs.
 

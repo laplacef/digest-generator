@@ -36,7 +36,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from digest_generator.core.audio.renderer import AudioRenderer
     from digest_generator.core.digest.types import DigestResult
-    from digest_generator.core.label import TopicClassifier
+    from digest_generator.core.label.stages.topic import TopicClassifier
     from digest_generator.core.summary import ContentSummarizer
     from digest_generator.core.types import Filter
     from digest_generator.shared.llm.sampling import SamplingConfig
@@ -256,7 +256,7 @@ async def label(
 
     Iterates ``iter_fetched(run_dir)``. Skips any feed whose labeled
     batch already exists. Inference runs in ``asyncio.to_thread`` per
-    batch (BART-MNLI is blocking).
+    batch (the classifier is blocking).
 
     Independent of the summarizer: uses ``entry.content_head`` (with
     title + description fallback) so the two stages can run
@@ -274,8 +274,8 @@ async def label(
     """
     import asyncio
 
-    from digest_generator.core.label import TopicClassifier
     from digest_generator.core.label.io import load_labeled, save_labeled
+    from digest_generator.core.label.stages.topic import TopicClassifier
     from digest_generator.shared.logging import collect_stage_telemetry
     from digest_generator.shared.runtime.meta import StageMeta, update_run_meta_telemetry
     from digest_generator.shared.transformers.registry import model_registry

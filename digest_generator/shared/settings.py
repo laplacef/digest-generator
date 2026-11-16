@@ -106,18 +106,19 @@ class Settings(BaseSettings):
     # many characters.
     content_head_max_chars: int = 2000
 
-    # -- Topic classifier (BART-MNLI zero-shot NLI) --
-    topic_model: str = "facebook/bart-large-mnli"
+    # -- Topic classifier (GLiClass zero-shot, every label in one pass) --
+    topic_model: str = "knowledgator/gliclass-base-v3.0"
     topic_revision: str = (
-        "d7645e127eaf1aefc7862fd59a17a5aa8558b8ce"  # pragma: allowlist secret  # gitleaks:allow
+        "77a70e6cd52e602ed18184ef37d18bdd3741e3d5"  # pragma: allowlist secret  # gitleaks:allow
     )
-    topic_threshold: float = 0.5
-    topic_max_length: int = 512
-    # Max premise-hypothesis pairs per forward pass. Each article is scored
-    # against every TopicType hypothesis, so effective articles-per-pass is
-    # ``topic_batch_size // vocabulary``. Batching cuts the number of forward
-    # passes; raise it on a GPU, lower it if CPU memory is tight.
-    topic_batch_size: int = 128
+    # Lowest score a label needs to be kept. GLiClass scores saturate near 1,
+    # so 0.998 keeps two to three labels per news article.
+    topic_min_score: float = 0.998
+    # Tokens per forward pass, the label prefix included. Labels come first,
+    # so truncation trims only the end of the article text.
+    topic_max_length: int = 1024
+    # Raise it on a GPU, lower it if CPU memory is tight.
+    topic_articles_per_batch: int = Field(default=8, gt=0)
 
     # -- Writer (digest map-phase section drafts) --
     writer_model: str = "gemma4:31b-cloud"
@@ -128,21 +129,21 @@ class Settings(BaseSettings):
     writer_section_batch_size: int = 30
 
     # -- Editorial (per-section prose cleanup pass) --
-    editorial_model: str = "gpt-oss:120b-cloud"
+    editorial_model: str = "gemma4:31b-cloud"
     editorial_temperature: float = 0.4
     editorial_top_p: float | None = None
     editorial_repetition_penalty: float | None = None
     editorial_seed: int | None = None
 
     # -- Framer (digest title + intro lede): set to None to fall back to writer_model --
-    framer_model: str | None = "gpt-oss:120b-cloud"
+    framer_model: str | None = "gemma4:31b-cloud"
     framer_temperature: float = 0.4
     framer_top_p: float | None = None
     framer_repetition_penalty: float | None = None
     framer_seed: int | None = None
 
     # -- Watcher (cross-section what-to-watch): set to None to fall back to writer_model --
-    watcher_model: str | None = "gpt-oss:120b-cloud"
+    watcher_model: str | None = "gemma4:31b-cloud"
     watcher_temperature: float = 0.4
     watcher_top_p: float | None = None
     watcher_repetition_penalty: float | None = None
@@ -166,7 +167,7 @@ class Settings(BaseSettings):
     # Pinned revision of the ``rhasspy/piper-voices`` repo. Pinning to a
     # specific commit (or tag) protects against upstream model swaps
     # silently changing narration output, the same reasoning as
-    # ``topic_revision`` for the BART-MNLI classifier.
+    # ``topic_revision`` for the topic classifier.
     audio_voice_revision: str = (
         "375a0fe641dea077c2a47b4e9a056d6da521eed3"  # pragma: allowlist secret  # gitleaks:allow
     )

@@ -269,7 +269,7 @@ def _format_topics(topics: Any) -> str:
     """Render the top-N topic labels by confidence as a comma-separated string.
 
     ``_load_digest_input`` emits ``topics`` as a ``dict[label, confidence]``
-    pre-sorted by confidence desc (the upstream BART-MNLI classifier's
+    pre-sorted by confidence desc (the upstream topic classifier's
     output shape). Falls back to handling ``list[Label]`` / ``list[dict]``
     for direct programmatic callers who pass the raw label objects.
     """

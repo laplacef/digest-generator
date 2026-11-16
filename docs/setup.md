@@ -7,7 +7,7 @@ One-time setup from a clone: required steps first, then the optional audio and G
 - **Python.** Version 3.13 or later.
 - **uv.** The package manager ([install](https://docs.astral.sh/uv/getting-started/installation/)).
 - **Ollama.** The summarizer and every digest stage call [Ollama](https://ollama.com), and the default models are Ollama cloud models. Step 4 covers the three ways to connect.
-- **HuggingFace token.** `run` and `label` log in to the HuggingFace Hub before the BART-MNLI classifier loads, so they fail without `HF_TOKEN` ([create a token](https://huggingface.co/settings/tokens) with a free account). Audio rendering does not need a token; Piper voices live in a public HF repo.
+- **HuggingFace token.** `run` and `label` log in to the HuggingFace Hub before the topic classifier loads, so they fail without `HF_TOKEN` ([create a token](https://huggingface.co/settings/tokens) with a free account). Audio rendering does not need a token; Piper voices live in a public HF repo.
 
 ## Installation
 
@@ -34,7 +34,7 @@ Edit `.env` and set `HF_TOKEN`. Keep any comment on its own line: a comment afte
 
 ### 4. Connect to Ollama
 
-The default models are `gemma4:31b-cloud` (summarizer and writer) and `gpt-oss:120b-cloud` (editor, framer, watcher, and clusterer). Pick one of three setups:
+The default models are `gemma4:31b-cloud` (summarizer, writer, editor, framer, and watcher) and `gpt-oss:120b-cloud` (clusterer). Pick one of three setups:
 
 - **Cloud, direct.** Set `OLLAMA_API_KEY` in `.env`. Every stage then calls ollama.com, and no local Ollama is needed.
 - **Local Ollama with cloud models.** Install Ollama, run `ollama signin`, and leave `OLLAMA_API_KEY` unset. The local server at `OLLAMA_HOST` (default `http://localhost:11434`) runs the cloud models through your account.
@@ -118,7 +118,7 @@ Listen to the result with any audio player (`mpv`, `ffplay`, VLC). In a clone, y
 
 ## Optional: GPU acceleration
 
-Required only when running the BART-MNLI topic classifier on GPU. CPU is the default and sufficient for a typical feed corpus.
+Required only when running the topic classifier on GPU. CPU is the default and sufficient for a typical feed corpus.
 
 ### Prerequisites
 

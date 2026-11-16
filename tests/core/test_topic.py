@@ -1,24 +1,50 @@
-"""Tests for digest_generator/core/label/stages/topic.py: TopicClassifier with mocked model.
+"""Tests for digest_generator/core/label/stages/topic.py: TopicClassifier with a fake pipeline.
 
-Mocks the tokenizer and model to test NLI-based classification flow:
-hypothesis generation, then model inference, then softmax, then tag assignment.
+The GLiClass pipeline is injected as a fake that returns one score per label,
+so the tests cover label rendering, the score cut, the top-1 fallback,
+ordering, and alignment without loading a model. Fakes and patches are
+autospecced from ``gliclass.ZeroShotClassificationPipeline``, so a keyword
+the installed gliclass doesn't accept fails here.
 """
 
 from datetime import UTC, datetime
-from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
 import torch
+from gliclass import ZeroShotClassificationPipeline
 
-from digest_generator.core.label import TopicClassifier
 from digest_generator.core.label.stages import topic as topic_module
-from digest_generator.core.types import Entry, Label, Summary, TopicType
+from digest_generator.core.label.stages.topic import TopicClassifier
+from digest_generator.core.types import Entry, Label, TopicType
+from digest_generator.shared.logging import collect_stage_telemetry
 from digest_generator.shared.transformers.types import DeviceType, ModelConfig
 
 # =============================================================================
 # Fixtures
 # =============================================================================
+
+
+def _label_text(topic: TopicType) -> str:
+    return topic.value.replace("-", " ")
+
+
+def _fake_pipeline(*per_text: dict[TopicType, float], default: float = 0.01) -> MagicMock:
+    """Pipeline stand-in returning every label's score for each text.
+
+    ``per_text[i]`` sets text i's scores (the last mapping repeats for any
+    further texts); labels not named score ``default``.
+    """
+
+    def run(texts, labels, threshold, batch_size):
+        rows = []
+        for i, _ in enumerate(texts):
+            scores = per_text[min(i, len(per_text) - 1)] if per_text else {}
+            by_text = {_label_text(t): s for t, s in scores.items()}
+            rows.append([{"label": lab, "score": by_text.get(lab, default)} for lab in labels])
+        return rows
+
+    return create_autospec(ZeroShotClassificationPipeline, instance=True, side_effect=run)
 
 
 @pytest.fixture
@@ -33,34 +59,22 @@ def mock_model_config():
     return config
 
 
-@pytest.fixture
-def classifier(mock_model_config):
-    return TopicClassifier(model_config=mock_model_config)
+def _classifier(model_config, pipeline=None):
+    if pipeline is None:
+        pipeline = _fake_pipeline()
+    return TopicClassifier(model_config=model_config, pipeline=pipeline)
 
 
-@pytest.fixture
-def sample_summary():
-    now = datetime.now(tz=UTC)
-    entry = Entry(
-        title="GPT-5 Released",
-        url="https://example.com/gpt5",
-        origin="openai",
-        published=now,
-        description="OpenAI releases GPT-5",
-        content="Full content about GPT-5 release.",
-    )
-    return Summary(entry=entry, summary="OpenAI released GPT-5.", length=22, topics=[])
-
-
-def _make_logits(num_labels, high_indices, high_value=5.0, low_value=-5.0):
-    """Create fake logits tensor with high entailment scores at given indices.
-
-    Shape: (num_labels, 3) where columns are [contradiction, neutral, entailment].
-    """
-    logits = torch.full((num_labels, 3), low_value)
-    for idx in high_indices:
-        logits[idx, 2] = high_value  # entailment column
-    return logits
+def _entry(n: int = 1, **fields) -> Entry:
+    defaults = {
+        "title": f"T{n}",
+        "url": f"https://e.com/{n}",
+        "origin": "f",
+        "published": datetime.now(tz=UTC),
+        "description": f"d{n}",
+        "content": "body",
+    }
+    return Entry(**(defaults | fields))
 
 
 # =============================================================================
@@ -69,211 +83,150 @@ def _make_logits(num_labels, high_indices, high_value=5.0, low_value=-5.0):
 
 
 class TestTopicClassifier:
-    def test_sets_eval_mode(self, mock_model_config):
-        TopicClassifier(model_config=mock_model_config)
-        mock_model_config.model.eval.assert_called_once()
-
-    def test_builds_label_list_from_tag_type(self, classifier):
+    def test_builds_label_list_from_topic_type(self, mock_model_config):
+        classifier = _classifier(mock_model_config)
         assert classifier.labels == [t.value for t in TopicType]
         assert len(classifier.labels) == len(TopicType)
 
-    def test_assigns_tags_above_threshold(self, classifier, sample_summary):
-        """Labels with entailment probability above threshold should be assigned."""
-        num_labels = len(TopicType)
-        # Make LLM and MODEL_RELEASE score high
-        llm_idx = list(TopicType).index(TopicType.LLM)
-        release_idx = list(TopicType).index(TopicType.MODEL_RELEASE)
-        logits = _make_logits(num_labels, [llm_idx, release_idx])
+    def test_default_pipeline_wraps_model_config(self, mock_model_config):
+        """Without an injected pipeline, one is built over the hydrated model."""
+        with patch.object(topic_module, "ZeroShotClassificationPipeline", autospec=True) as cls:
+            classifier = TopicClassifier(model_config=mock_model_config)
+        cls.assert_called_once_with(
+            mock_model_config.model,
+            mock_model_config.tokenizer,
+            max_length=topic_module.settings.topic_max_length,
+            classification_type="multi-label",
+            device=torch.device("cpu"),
+            progress_bar=False,
+        )
+        assert classifier.pipeline is cls.return_value
 
-        classifier.model.return_value = SimpleNamespace(logits=logits)
-        classifier.tokenizer.return_value = {
-            "input_ids": torch.tensor([[1]]),
-            "attention_mask": torch.tensor([[1]]),
-        }
+    def test_default_pipeline_keeps_mps_device(self, mock_model_config):
+        """The pipeline gets a torch.device, since it maps a non-cuda string to CPU."""
+        mock_model_config.device = DeviceType.MPS
+        with patch.object(topic_module, "ZeroShotClassificationPipeline", autospec=True) as cls:
+            TopicClassifier(model_config=mock_model_config)
+        assert cls.call_args.kwargs["device"] == torch.device("mps")
 
-        results = classifier.classify_summaries([sample_summary], threshold=0.5)
+    def test_keeps_a_falsy_injected_pipeline(self, mock_model_config):
+        """An injected pipeline is used even when it is falsy."""
+        pipeline = MagicMock()
+        pipeline.__bool__.return_value = False
+        with patch.object(topic_module, "ZeroShotClassificationPipeline", autospec=True) as cls:
+            classifier = TopicClassifier(model_config=mock_model_config, pipeline=pipeline)
+        cls.assert_not_called()
+        assert classifier.pipeline is pipeline
 
-        tag_types = {t.value for t in results[0].topics}
-        assert TopicType.LLM in tag_types
-        assert TopicType.MODEL_RELEASE in tag_types
+    def test_raises_when_pipeline_drops_rows(self, mock_model_config):
+        """One result row per input text, or the labels would misalign with entries."""
+        row = [{"label": _label_text(TopicType.LLM), "score": 0.999}]
+        pipeline = create_autospec(
+            ZeroShotClassificationPipeline, instance=True, return_value=[row]
+        )
+        classifier = _classifier(mock_model_config, pipeline)
 
-    def test_assigns_top_one_if_none_above_threshold(self, classifier, sample_summary):
-        """If no label exceeds threshold, the highest-scoring one is still assigned."""
-        num_labels = len(TopicType)
-        # All scores low, but LLM slightly less low
-        logits = torch.full((num_labels, 3), -5.0)
-        llm_idx = list(TopicType).index(TopicType.LLM)
-        logits[llm_idx, 2] = -1.0  # Still below threshold after softmax, but highest
+        with pytest.raises(RuntimeError, match="1 result rows for 2 texts"):
+            classifier._infer_batch(["a", "b"], min_score=0.9)
 
-        classifier.model.return_value = SimpleNamespace(logits=logits)
-        classifier.tokenizer.return_value = {
-            "input_ids": torch.tensor([[1]]),
-            "attention_mask": torch.tensor([[1]]),
-        }
+    def test_requests_every_label_score_in_batches(self, mock_model_config, monkeypatch):
+        """Labels reach the model as plain text, unfiltered, in configured batches."""
+        monkeypatch.setattr(topic_module.settings, "topic_articles_per_batch", 4)
+        pipeline = _fake_pipeline()
+        classifier = _classifier(mock_model_config, pipeline)
 
-        results = classifier.classify_summaries([sample_summary], threshold=0.99)
+        classifier._infer_batch(["a", "b"], min_score=0.9)
 
-        assert len(results[0].topics) >= 1
-        # The top-1 tag should be assigned regardless of threshold
+        texts, labels = pipeline.call_args.args
+        assert texts == ["a", "b"]
+        assert labels == [_label_text(t) for t in TopicType]
+        assert "large language models" in labels
+        assert pipeline.call_args.kwargs == {"threshold": 0.0, "batch_size": 4}
 
-    def test_tags_sorted_by_confidence(self, classifier, sample_summary):
-        """Tags should be sorted by confidence descending."""
-        num_labels = len(TopicType)
-        llm_idx = list(TopicType).index(TopicType.LLM)
-        safety_idx = list(TopicType).index(TopicType.SAFETY)
-        # LLM higher than SAFETY
-        logits = torch.full((num_labels, 3), -5.0)
-        logits[llm_idx, 2] = 6.0
-        logits[safety_idx, 2] = 4.0
+    def test_assigns_labels_at_or_above_min_score(self, mock_model_config):
+        pipeline = _fake_pipeline({TopicType.LLM: 0.999, TopicType.MODEL_RELEASE: 0.998})
+        classifier = _classifier(mock_model_config, pipeline)
 
-        classifier.model.return_value = SimpleNamespace(logits=logits)
-        classifier.tokenizer.return_value = {
-            "input_ids": torch.tensor([[1]]),
-            "attention_mask": torch.tensor([[1]]),
-        }
+        [labels] = classifier._infer_batch(["text"], min_score=0.998)
 
-        results = classifier.classify_summaries([sample_summary], threshold=0.5)
+        assert {t.value for t in labels} == {TopicType.LLM, TopicType.MODEL_RELEASE}
 
-        confidences = [t.confidence for t in results[0].topics]
-        assert confidences == sorted(confidences, reverse=True)
+    def test_assigns_top_one_if_none_reach_min_score(self, mock_model_config):
+        pipeline = _fake_pipeline({TopicType.LLM: 0.4, TopicType.SAFETY: 0.3})
+        classifier = _classifier(mock_model_config, pipeline)
 
-    def test_tags_are_tag_objects(self, classifier, sample_summary):
-        """Each tag should be a Label dataclass with TopicType and float confidence."""
-        num_labels = len(TopicType)
-        llm_idx = list(TopicType).index(TopicType.LLM)
-        logits = _make_logits(num_labels, [llm_idx])
+        [labels] = classifier._infer_batch(["text"], min_score=0.99)
 
-        classifier.model.return_value = SimpleNamespace(logits=logits)
-        classifier.tokenizer.return_value = {
-            "input_ids": torch.tensor([[1]]),
-            "attention_mask": torch.tensor([[1]]),
-        }
+        assert [t.value for t in labels] == [TopicType.LLM]
+        assert labels[0].confidence == pytest.approx(0.4)
 
-        results = classifier.classify_summaries([sample_summary])
+    def test_tags_sorted_by_confidence(self, mock_model_config):
+        pipeline = _fake_pipeline(
+            {TopicType.SAFETY: 0.9991, TopicType.LLM: 0.9999, TopicType.AGENTS: 0.9995}
+        )
+        classifier = _classifier(mock_model_config, pipeline)
 
-        for tag in results[0].topics:
+        [labels] = classifier._infer_batch(["text"], min_score=0.999)
+
+        assert [t.value for t in labels] == [TopicType.LLM, TopicType.AGENTS, TopicType.SAFETY]
+
+    def test_tags_are_label_objects(self, mock_model_config):
+        classifier = _classifier(mock_model_config, _fake_pipeline({TopicType.LLM: 0.999}))
+
+        [labels] = classifier._infer_batch(["text"], min_score=0.998)
+
+        for tag in labels:
             assert isinstance(tag, Label)
             assert isinstance(tag.value, TopicType)
             assert isinstance(tag.confidence, float)
 
-    def test_processes_multiple_summaries(self, classifier, sample_summary):
-        """Multiple summaries are scored in one batched forward pass, aligned in order.
+    def test_results_align_with_input_order(self, mock_model_config):
+        pipeline = _fake_pipeline({TopicType.ROBOTICS: 0.999}, {TopicType.PRIVACY: 0.999})
+        classifier = _classifier(mock_model_config, pipeline)
 
-        The batched path pairs every text with all label hypotheses in one tensor,
-        so the mock is batch-aware: logits are sized to the input, with the LLM
-        label's entailment row set high for each text (rows are text-major).
-        """
-        num_labels = len(TopicType)
-        llm_idx = list(TopicType).index(TopicType.LLM)
+        results = classifier._infer_batch(["robots", "privacy"], min_score=0.998)
 
-        def fake_tokenizer(premises, hyps, **kwargs):
-            n = len(premises)
-            return {
-                "input_ids": torch.ones((n, 4), dtype=torch.long),
-                "attention_mask": torch.ones((n, 4), dtype=torch.long),
-            }
+        assert [r[0].value for r in results] == [TopicType.ROBOTICS, TopicType.PRIVACY]
 
-        def fake_model(**inputs):
-            n = inputs["input_ids"].shape[0]
-            logits = torch.full((n, 3), -5.0)
-            for i in range(n):
-                if i % num_labels == llm_idx:
-                    logits[i, 2] = 5.0  # entailment high for the LLM hypothesis
-            return SimpleNamespace(logits=logits)
+    def test_classify_entries_reads_content_head_then_title(self, mock_model_config):
+        """content_head is scored when present; title and description otherwise."""
+        pipeline = _fake_pipeline({TopicType.CLOUD: 0.999})
+        classifier = _classifier(mock_model_config, pipeline)
 
-        classifier.tokenizer.side_effect = fake_tokenizer
-        classifier.model.side_effect = fake_model
-
-        entry2 = Entry(
-            title="Test",
-            url="https://example.com/2",
-            origin="github",
-            published=datetime.now(tz=UTC),
-            description="desc",
-            content="content",
+        results = classifier.classify_entries(
+            [_entry(1, content_head="head text"), _entry(2)], feed="f"
         )
-        summary2 = Summary(entry=entry2, summary="text", length=4, topics=[])
 
-        results = classifier.classify_summaries([sample_summary, summary2])
-        assert len(results) == 2
-        assert TopicType.LLM in {t.value for t in results[0].topics}
-        assert TopicType.LLM in {t.value for t in results[1].topics}
+        assert pipeline.call_args.args[0] == ["head text", "T2\nd2"]
+        assert all(r[0].value == TopicType.CLOUD for r in results)
 
-    def test_batches_by_pair_budget(self, classifier, monkeypatch):
-        """topic_batch_size controls how many forward passes N texts take."""
-        num_labels = len(TopicType)
+    def test_classify_entries_cuts_at_the_settings_min_score(self, mock_model_config, monkeypatch):
+        monkeypatch.setattr(topic_module.settings, "topic_min_score", 0.95)
+        pipeline = _fake_pipeline({TopicType.API: 0.97, TopicType.DEVEX: 0.9})
+        classifier = _classifier(mock_model_config, pipeline)
 
-        def fake_tokenizer(premises, hyps, **kwargs):
-            n = len(premises)
-            return {
-                "input_ids": torch.ones((n, 4), dtype=torch.long),
-                "attention_mask": torch.ones((n, 4), dtype=torch.long),
-            }
+        [labels] = classifier.classify_entries([_entry()])
 
-        def fake_model(**inputs):
-            return SimpleNamespace(logits=torch.full((inputs["input_ids"].shape[0], 3), 1.0))
+        assert [t.value for t in labels] == [TopicType.API]
 
-        classifier.tokenizer.side_effect = fake_tokenizer
-        classifier.model.side_effect = fake_model
-        texts = ["a", "b", "c"]
+    def test_span_records_the_cut_and_batch_settings(self, mock_model_config, monkeypatch):
+        """These span fields land in meta.json under stages.topic."""
+        monkeypatch.setattr(topic_module.settings, "topic_min_score", 0.95)
+        monkeypatch.setattr(topic_module.settings, "topic_articles_per_batch", 4)
+        classifier = _classifier(mock_model_config, _fake_pipeline({TopicType.API: 0.97}))
 
-        # Budget = one text's worth of pairs => one forward pass per text.
-        monkeypatch.setattr(topic_module.settings, "topic_batch_size", num_labels)
-        classifier.model.reset_mock()
-        classifier._infer_batch(texts, threshold=0.5)
-        assert classifier.model.call_count == 3
+        with collect_stage_telemetry() as sink:
+            classifier.classify_entries([_entry(1), _entry(2)], feed="f")
 
-        # Budget covers all three texts => a single forward pass.
-        monkeypatch.setattr(topic_module.settings, "topic_batch_size", num_labels * 4)
-        classifier.model.reset_mock()
-        classifier._infer_batch(texts, threshold=0.5)
-        assert classifier.model.call_count == 1
+        span = sink["topic"]
+        assert span["min_score"] == 0.95
+        assert span["articles_per_batch"] == 4
+        assert span["entries"] == 2
+        assert span["labels"] == 2
+        assert span["vocabulary"] == len(TopicType)
 
-    def test_moves_inputs_to_model_device(self, classifier):
-        """Tokenizer output lands on the model's device before the forward pass."""
-        moved = []
-
-        def fake_tensor(rows):
-            tensor = MagicMock()
-
-            def to(device):
-                moved.append(device)
-                return torch.ones((rows, 4), dtype=torch.long)
-
-            tensor.to.side_effect = to
-            return tensor
-
-        def fake_tokenizer(premises, hyps, **kwargs):
-            rows = len(premises)
-            return {"input_ids": fake_tensor(rows), "attention_mask": fake_tensor(rows)}
-
-        def fake_model(**inputs):
-            return SimpleNamespace(logits=torch.full((inputs["input_ids"].shape[0], 3), 1.0))
-
-        classifier.tokenizer.side_effect = fake_tokenizer
-        classifier.model.side_effect = fake_model
-        classifier.device = DeviceType.CUDA  # recorded as the .to() target, never executed
-        classifier._infer_batch(["a"], threshold=0.5)
-        assert moved == [DeviceType.CUDA, DeviceType.CUDA]
-
-    def test_empty_summaries(self, classifier):
-        assert classifier.classify_summaries([]) == []
-
-    def test_hypothesis_format(self, classifier, sample_summary):
-        """Hypotheses should follow 'This article is about {label}.' format."""
-        num_labels = len(TopicType)
-        logits = _make_logits(num_labels, [0])
-
-        classifier.model.return_value = SimpleNamespace(logits=logits)
-        classifier.tokenizer.return_value = {
-            "input_ids": torch.tensor([[1]]),
-            "attention_mask": torch.tensor([[1]]),
-        }
-
-        classifier.classify_summaries([sample_summary])
-
-        # Check the tokenizer was called with text-hypothesis pairs
-        call_args = classifier.tokenizer.call_args
-        hypotheses = call_args[0][1]
-        assert all(h.startswith("This article is about ") for h in hypotheses)
-        assert all(h.endswith(".") for h in hypotheses)
+    def test_empty_entries(self, mock_model_config):
+        pipeline = _fake_pipeline()
+        classifier = _classifier(mock_model_config, pipeline)
+        assert classifier.classify_entries([]) == []
+        pipeline.assert_not_called()

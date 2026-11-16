@@ -1,7 +1,7 @@
 """HuggingFace Hub authentication, shared by every HF Hub consumer.
 
 A single ``auto_login()`` against ``settings.hf_token`` covers both
-``shared/transformers/`` (BART-MNLI classifier downloads via
+``shared/transformers/`` (topic classifier downloads via
 ``from_pretrained``) and ``shared/tts/`` (Piper voice files via
 ``hf_hub_download``). Centralized here because Hub auth is orthogonal
 to the serving engine: the Hub is the artifact source, and the package

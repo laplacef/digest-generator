@@ -1,198 +1,111 @@
-"""Zero-shot topic classification using BART-large-MNLI.
+"""Zero-shot topic classification using GLiClass.
 
-Three public entry points:
-
-- ``classify_text(text)`` takes a single text and returns ``list[Label]``.
-  This is the canonical shape; ``api.label`` feeds raw entry text rather
-  than the post-summarizer string.
-- ``classify_entries(entries)`` takes a batch ``list[Entry]`` and returns
-  ``list[list[Label]]``, using ``entry.content_head`` (with
-  ``title + description`` fallback when the head is empty). Wrapped in
-  ``log_stage("topic")``.
-- ``classify_summaries(summaries)`` is a backward-compatible wrapper for
-  direct programmatic callers. It builds the input string from
-  ``title + description + summary`` and attaches topics to copies of the
-  input summaries. The production path does not use it.
+``TopicClassifier.classify_entries`` labels one feed's entries for
+``api.label``. It reads the article text rather than the LLM summary, so
+labeling runs alongside the summarizer.
 """
 
-from dataclasses import replace
+from collections.abc import Callable
 from time import perf_counter
+from typing import Any
 
 import torch
+from gliclass import ZeroShotClassificationPipeline
 
-from digest_generator.core.types import Entry, Label, Summary, TopicType
+from digest_generator.core.types import Entry, Label, TopicType
 from digest_generator.shared.logging import log_stage
 from digest_generator.shared.settings import settings
 from digest_generator.shared.transformers.types import ModelConfig
 
 
 class TopicClassifier:
-    """Classifies text into ``TopicType`` categories using zero-shot NLI.
+    """Labels entries with ``TopicType`` topics using a GLiClass zero-shot model.
 
-    Builds hypotheses of the form "This article is about {label}" for each
-    ``TopicType`` value and scores them via entailment probability.
+    GLiClass encodes every label together with the text, so one forward pass
+    scores the whole vocabulary for an article. Each label gets an independent
+    sigmoid score (multi-label).
 
     Args:
-        model_config: A pre-loaded ``ModelConfig`` with tokenizer and model hydrated.
+        model_config: A loaded ``ModelConfig`` with tokenizer and model hydrated.
+        pipeline: Callable with the ``gliclass.ZeroShotClassificationPipeline``
+            interface. Defaults to one built over ``model_config``.
     """
 
-    def __init__(self, model_config: ModelConfig):
-        self.tokenizer = model_config.tokenizer
-        self.model = model_config.model
-        self.device = model_config.device
-        self.model.eval()
+    def __init__(self, model_config: ModelConfig, pipeline: Callable[..., Any] | None = None):
         self.labels = [t.value for t in TopicType]
-
-    def classify_text(self, text: str, threshold: float | None = None) -> list[Label]:
-        """Run NLI over ``text``, return labels above threshold (top-1 fallback).
-
-        No log_stage wrapper; meant to be called from a batch entry point or
-        from the api layer's ``label`` orchestrator that wraps its own span.
-        """
-        threshold = threshold if threshold is not None else settings.topic_threshold
-        return self._infer(text, threshold)
+        # The text the model reads for each label, mapped back to the label:
+        # "large language models" stands for "large-language-models".
+        self._label_by_text = {lab.replace("-", " "): lab for lab in self.labels}
+        if pipeline is None:
+            pipeline = ZeroShotClassificationPipeline(
+                model_config.model,
+                model_config.tokenizer,
+                max_length=settings.topic_max_length,
+                classification_type="multi-label",
+                # The pipeline uses a torch.device as given but maps any string
+                # without "cuda" to CPU, which would ignore "mps".
+                device=torch.device(model_config.device_str),
+                progress_bar=False,
+            )
+        self.pipeline: Callable[..., Any] = pipeline
 
     def classify_entries(
-        self,
-        entries: list[Entry],
-        threshold: float | None = None,
-        *,
-        feed: str | None = None,
+        self, entries: list[Entry], *, feed: str | None = None
     ) -> list[list[Label]]:
-        """Classify a batch of entries via raw text.
+        """Label each entry, returning one ``list[Label]`` per entry in input order.
 
-        Uses ``entry.content_head`` when present; falls back to
-        ``title + '\\n' + description`` when the head is empty (fetcher-side
-        fallback case for feeds without extractable prose). Returns
-        ``list[list[Label]]`` aligned with the input order.
-
-        ``feed`` (optional) tags the ``stage.start`` / ``stage.done`` lines
-        so concurrent per-feed invocations are distinguishable in run.log.
+        Scores ``entry.content_head``, or the title and description when the
+        fetcher found no article prose. ``feed`` tags the stage span so
+        concurrent per-feed calls are distinguishable in ``run.log``.
         """
-        threshold = threshold if threshold is not None else settings.topic_threshold
-
+        min_score = settings.topic_min_score
         start_fields = {"feed": feed} if feed else {}
         with log_stage("topic", **start_fields) as span:
             start = perf_counter()
             texts = [e.content_head or f"{e.title}\n{e.description}" for e in entries]
-            labels_per_entry = self._infer_batch(texts, threshold)
-            total_labels = sum(len(labels) for labels in labels_per_entry)
-
+            labels_per_entry = self._infer_batch(texts, min_score)
             elapsed = perf_counter() - start
+
             n = len(entries)
-            articles_per_sec = round(n / elapsed, 3) if elapsed > 0 else 0.0
-            avg_labels = round(total_labels / n, 2) if n > 0 else 0.0
+            total_labels = sum(len(labels) for labels in labels_per_entry)
             span.set(
                 entries=n,
                 labels=total_labels,
-                avg_labels_per_entry=avg_labels,
-                threshold=threshold,
+                avg_labels_per_entry=round(total_labels / n, 2) if n else 0.0,
+                min_score=min_score,
                 vocabulary=len(self.labels),
-                batch_size=settings.topic_batch_size,
-                articles_per_sec=articles_per_sec,
+                articles_per_batch=settings.topic_articles_per_batch,
+                articles_per_sec=round(n / elapsed, 3) if elapsed > 0 else 0.0,
             )
             return labels_per_entry
 
-    def classify_summaries(
-        self,
-        summaries: list[Summary],
-        threshold: float | None = None,
-        *,
-        feed: str | None = None,
-    ) -> list[Summary]:
-        """Classify based on title + description + summary (backward-compatible).
+    def _infer_batch(self, texts: list[str], min_score: float) -> list[list[Label]]:
+        """Score each text against every label and keep those at or above ``min_score``.
 
-        Returns new ``Summary`` objects with ``topics`` populated; the
-        originals are not modified. Provided for direct programmatic callers;
-        the production path uses ``classify_entries`` via ``api.label``.
-
-        Args:
-            summaries: Summaries to classify.
-            threshold: Minimum entailment probability to accept a label.
-            feed: Optional tag rendered on ``stage.start`` / ``stage.done``
-                so concurrent per-feed invocations are distinguishable.
-
-        Returns:
-            New list of summaries with ``topics`` populated.
-        """
-        threshold = threshold if threshold is not None else settings.topic_threshold
-
-        start_fields = {"feed": feed} if feed else {}
-        with log_stage("topic", **start_fields) as span:
-            start = perf_counter()
-            texts = [f"{s.entry.title}\n{s.entry.description}\n{s.summary}" for s in summaries]
-            labels_per = self._infer_batch(texts, threshold)
-            labeled = [
-                replace(s, topics=labels) for s, labels in zip(summaries, labels_per, strict=True)
-            ]
-            total_labels = sum(len(labels) for labels in labels_per)
-
-            elapsed = perf_counter() - start
-            n = len(labeled)
-            articles_per_sec = round(n / elapsed, 3) if elapsed > 0 else 0.0
-            avg_labels = round(total_labels / n, 2) if n > 0 else 0.0
-            span.set(
-                summaries=n,
-                labels=total_labels,
-                avg_labels_per_summary=avg_labels,
-                threshold=threshold,
-                vocabulary=len(self.labels),
-                batch_size=settings.topic_batch_size,
-                articles_per_sec=articles_per_sec,
-            )
-            return labeled
-
-    def _infer(self, text: str, threshold: float) -> list[Label]:
-        """Run NLI on a single text; thin wrapper over the batched path."""
-        return self._infer_batch([text], threshold)[0]
-
-    def _infer_batch(self, texts: list[str], threshold: float) -> list[list[Label]]:
-        """Score many texts against every ``TopicType`` hypothesis, batched.
-
-        Each text is paired with all label hypotheses; texts are grouped so that
-        at most ``settings.topic_batch_size`` (premise, hypothesis) pairs go
-        through the model per forward pass, cutting the pass count by roughly the
-        texts-per-chunk factor versus one text at a time. A text's full set of
-        hypotheses always stays within one chunk, so the logits reshape back to
-        one row per text is exact. Returns one ``list[Label]`` per input text, in
-        order.
+        The pipeline returns every label's score (it gets threshold 0), so the
+        cut happens here, and a text with no label that reaches it keeps its
+        top label. Raises ``RuntimeError`` unless the pipeline returns one row per
+        text, since a short result would misalign labels with entries.
         """
         if not texts:
             return []
-        hypotheses = [f"This article is about {lab.replace('-', ' ')}." for lab in self.labels]
-        n_labels = len(hypotheses)
-        texts_per_chunk = max(1, settings.topic_batch_size // n_labels)
+        rows = self.pipeline(
+            texts,
+            list(self._label_by_text),
+            threshold=0.0,
+            batch_size=settings.topic_articles_per_batch,
+        )
+        if len(rows) != len(texts):
+            msg = f"GLiClass returned {len(rows)} result rows for {len(texts)} texts"
+            raise RuntimeError(msg)
 
         results: list[list[Label]] = []
-        for start in range(0, len(texts), texts_per_chunk):
-            chunk = texts[start : start + texts_per_chunk]
-            premises = [t for t in chunk for _ in range(n_labels)]
-            hyps = hypotheses * len(chunk)
-
-            encoded = self.tokenizer(
-                premises,
-                hyps,
-                return_tensors="pt",
-                padding=True,
-                truncation=True,
-                max_length=settings.topic_max_length,
+        for row in rows:
+            scored = sorted(
+                ((self._label_by_text[r["label"]], float(r["score"])) for r in row),
+                key=lambda x: x[1],
+                reverse=True,
             )
-            # The tokenizer returns CPU tensors; the model sits on self.device.
-            inputs = {key: tensor.to(self.device) for key, tensor in encoded.items()}
-
-            with torch.inference_mode():
-                logits = self.model(**inputs).logits
-
-            # ``entail[i, j]`` is text i's entailment probability for label j.
-            entail = torch.softmax(logits, dim=1)[:, 2].view(len(chunk), n_labels)
-            for row in entail:
-                scored = sorted(
-                    ((lab, float(score)) for lab, score in zip(self.labels, row, strict=True)),
-                    key=lambda x: x[1],
-                    reverse=True,
-                )
-                chosen = [(lab, sc) for lab, sc in scored if sc >= threshold] or [scored[0]]
-                results.append(
-                    [Label(value=TopicType(lab), confidence=float(sc)) for lab, sc in chosen]
-                )
+            chosen = [(lab, sc) for lab, sc in scored if sc >= min_score] or scored[:1]
+            results.append([Label(value=TopicType(lab), confidence=sc) for lab, sc in chosen])
         return results
