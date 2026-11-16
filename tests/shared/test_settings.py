@@ -167,3 +167,29 @@ class TestSettingsValidation:
         env = {"TOPIC_ARTICLES_PER_BATCH": value}
         with patch.dict("os.environ", env), pytest.raises(ValidationError):
             _clean_settings()
+
+
+_FAKE_HUB_VALUE = "sentinel-hub-value"
+_FAKE_OLLAMA_VALUE = "sentinel-ollama-value"
+
+
+class TestSettingsRepr:
+    """Credentials stay out of the repr, so a traceback or a logged Settings can't print one."""
+
+    @pytest.fixture
+    def with_credentials(self):
+        return _clean_settings(hf_token=_FAKE_HUB_VALUE, ollama_api_key=_FAKE_OLLAMA_VALUE)
+
+    def test_repr_omits_credential_values(self, with_credentials):
+        assert "sentinel" not in repr(with_credentials)
+        assert "sentinel" not in str(with_credentials)
+
+    def test_credentials_keep_their_plain_values(self, with_credentials):
+        assert with_credentials.hf_token == _FAKE_HUB_VALUE
+        assert with_credentials.ollama_api_key == _FAKE_OLLAMA_VALUE
+
+    def test_every_credential_field_is_hidden(self):
+        """A credential field added later fails here until it is hidden too."""
+        credentials = [n for n in Settings.model_fields if n.endswith(("_token", "_key"))]
+        assert set(credentials) >= {"hf_token", "ollama_api_key"}
+        assert [n for n in credentials if Settings.model_fields[n].repr] == []

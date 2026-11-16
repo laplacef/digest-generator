@@ -45,11 +45,15 @@ class Settings(BaseSettings):
     device: str = Field(default="cpu", description="Compute device: cpu, cuda, or mps")
 
     # -- HuggingFace --
-    hf_token: str = Field(default="", description="HuggingFace API token for model downloads")
+    # Credentials are hidden from the repr, so a traceback or a logged Settings
+    # cannot print one. Callers still read the plain string.
+    hf_token: str = Field(
+        default="", repr=False, description="HuggingFace API token for model downloads"
+    )
 
     # -- Ollama (shared by summarizer + every digest stage) --
     ollama_host: str = "http://localhost:11434"
-    ollama_api_key: str = ""
+    ollama_api_key: str = Field(default="", repr=False)
     # Global cap on in-flight Ollama calls across every stage. Acquired by
     # `chat_with_logging` so it covers the summarizer fan-out *and* any
     # future digest stage that parallelizes calls. The summarizer's own
