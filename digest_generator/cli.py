@@ -331,7 +331,7 @@ def run(
     """Run the full pipeline: fetch, summarize, label, and generate digest.
 
     Digest model and sampling overrides are not exposed here; use
-    ``digest_generator digest <run_dir>`` for tuned digest output, which can re-run
+    "digest-generator digest <run_dir>" for tuned digest output, which can re-run
     against the cached corpus without paying summarizer cost again.
     """
     if audio and no_digest:
@@ -798,15 +798,15 @@ def audio(
         int | None,
         typer.Option(
             "--bitrate-kbps",
-            help="Override the configured Opus bitrate (default from settings.audio_bitrate_kbps).",
+            help="Override the configured Opus bitrate (default from AUDIO_BITRATE_KBPS).",
         ),
     ] = None,
 ) -> None:
-    """Render the digest at ``run_dir`` to an Opus audio file.
+    """Render the digest at RUN_DIR to an Opus audio file.
 
     Workhorse for iterating on the narration pre-pass, with no LLM cost:
-    markdown -> Piper -> ffmpeg. Output lands at
-    ``{run_dir}/audio/{date}.opus``. Cache-aware: re-running
+    markdown, then Piper, then ffmpeg. Output lands at
+    RUN_DIR/audio/<date>.opus. Cache-aware: re-running
     against the same markdown + voice + bitrate is a no-op.
     """
     if not run_dir.is_dir():

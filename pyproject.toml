@@ -13,7 +13,7 @@ packages = ["digest_generator"]
 [project]
 name = "digest-generator"
 version = "0.3.0"
-description = "Generates weekly digests from RSS feeds using local LLMs and topic classification."
+description = "Generates digests from RSS feeds using LLM summaries and zero-shot topic classification."
 readme = "README.md"
 requires-python = ">=3.13"
 license = "Apache-2.0"

@@ -3,8 +3,9 @@
 import os
 
 import pytest
+from typer.testing import CliRunner
 
-from digest_generator.cli import _apply_env_overrides
+from digest_generator.cli import _apply_env_overrides, app
 
 _KEYS = ("DEVICE", "OUTPUT_DIR", "FEEDS_FILE", "DIGEST_CONFIG")
 
@@ -31,3 +32,27 @@ class TestApplyEnvOverrides:
         _apply_env_overrides("cuda", "out")
         assert os.environ["DEVICE"] == "cuda"
         assert os.environ["OUTPUT_DIR"] == "out"
+
+
+_COMMANDS = ["init", "run", "fetch", "summarize", "label", "digest", "audio", "lint", "feeds"]
+
+
+class TestHelpText:
+    """Help output is plain terminal text: no RST markup, arrows, or module names."""
+
+    @pytest.mark.parametrize("command", _COMMANDS)
+    def test_help_has_no_markup(self, command):
+        result = CliRunner().invoke(app, [command, "--help"])
+        assert result.exit_code == 0
+        assert "``" not in result.output
+        assert "->" not in result.output
+
+    def test_run_help_names_the_console_script(self):
+        output = " ".join(CliRunner().invoke(app, ["run", "--help"]).output.split())
+        assert "digest_generator digest" not in output
+        assert "digest-generator digest" in output
+
+    def test_bitrate_help_cites_the_env_var(self):
+        output = CliRunner().invoke(app, ["audio", "--help"]).output
+        assert "AUDIO_BITRATE_KBPS" in output
+        assert "settings." not in output
