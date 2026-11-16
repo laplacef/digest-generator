@@ -3,6 +3,31 @@
 The format is based on [Common Changelog](https://common-changelog.org/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0-rc.1] - 2026-11-16
+
+_This release candidate moves the editor, framer, watcher, and topic classifier to free-tier models, and installs from PyPI as `digest-generator==0.4.0rc1`._
+
+### Changed
+
+- **Breaking:** Rename `TOPIC_THRESHOLD` to `TOPIC_MIN_SCORE` and `TOPIC_BATCH_SIZE` to `TOPIC_ARTICLES_PER_BATCH`; the old names are ignored, and the topic stage fields `threshold` and `batch_size` in `meta.json` become `min_score` and `articles_per_batch` ([#52](https://github.com/laplacef/digest-generator/pull/52))
+- **Breaking:** Classify topics with GLiClass (`knowledgator/gliclass-base-v3.0`) in place of BART-MNLI, which adds the `gliclass` dependency and scores labels on a new scale with a default cut of 0.998 ([#52](https://github.com/laplacef/digest-generator/pull/52))
+- **Breaking:** Default the editor, framer, and watcher to `gemma4:31b-cloud` in place of `gpt-oss:120b-cloud` ([#52](https://github.com/laplacef/digest-generator/pull/52))
+- **Breaking:** Import `TopicClassifier` from `digest_generator.core.label.stages.topic`; `digest_generator.core.label` no longer re-exports it, so the digest path loads neither torch nor gliclass ([#52](https://github.com/laplacef/digest-generator/pull/52))
+- Declare `httpx`, `huggingface-hub`, and `pydantic` as direct dependencies and drop `python-dotenv`, which nothing imports ([#64](https://github.com/laplacef/digest-generator/pull/64))
+
+### Removed
+
+- **Breaking:** Remove `TopicClassifier.classify_text`, `classify_summaries`, and the threshold argument of `classify_entries` ([#52](https://github.com/laplacef/digest-generator/pull/52))
+- **Breaking:** Remove the unused `AUDIO_ENABLED` setting, `VoiceConfig.config_path`, and `Summary.topics` ([#61](https://github.com/laplacef/digest-generator/pull/61))
+- **Breaking:** Stop carrying a v1 `meta.json`'s flat `topic_revision` and `summarizer_revision` keys into `revisions` when the file is patched ([#61](https://github.com/laplacef/digest-generator/pull/61))
+
+### Fixed
+
+- Keep `HF_TOKEN` and `OLLAMA_API_KEY` out of the `Settings` repr, so an error that prints the object no longer shows them ([#60](https://github.com/laplacef/digest-generator/pull/60))
+- Show plain text in `--help`, name the `digest-generator digest` command, and cite `AUDIO_BITRATE_KBPS` for `--bitrate-kbps` ([#62](https://github.com/laplacef/digest-generator/pull/62))
+- Describe the package without "weekly" and "local LLMs" ([#62](https://github.com/laplacef/digest-generator/pull/62))
+- Restore the verbatim Apache-2.0 license text ([#45](https://github.com/laplacef/digest-generator/pull/45))
+
 ## [0.3.0] - 2026-10-19
 
 _This release resolves configuration from a single directory and fixes the crashes, hangs, and lost work found since 0.2.0._
@@ -77,6 +102,7 @@ Initial public release.
 - Centralized configuration via environment variables / `.env`
 - Structured logging with per-run log files and secret redaction
 
+[0.4.0-rc.1]: https://github.com/laplacef/digest-generator/releases/tag/v0.4.0-rc.1
 [0.3.0]: https://github.com/laplacef/digest-generator/releases/tag/v0.3.0
 [0.2.0]: https://github.com/laplacef/digest-generator/releases/tag/v0.2.0
 [0.1.0]: https://github.com/laplacef/digest-generator/releases/tag/v0.1.0
