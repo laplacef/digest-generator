@@ -66,11 +66,13 @@ jobs:
           name: dist
           path: dist/
 
-      - uses: pypa/gh-action-pypi-publish@release/v1
+      # Pinned to a commit: this job holds the OIDC token that publishes to PyPI.
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
 
   github-release:
     name: Create GitHub Release
-    needs: build
+    # Waits for the upload, so a failed publish leaves no GitHub release behind.
+    needs: [build, pypi-publish]
     runs-on: ubuntu-latest
     permissions:
       contents: write

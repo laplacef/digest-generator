@@ -44,6 +44,9 @@ repos:
         language: system
         # toml lets ruff validate pyproject.toml metadata (RUF200)
         types_or: [python, pyi, toml]
+        # Newer identify releases tag uv.lock as toml, and ruff would parse it as
+        # Python. A path exclude holds under any identify version.
+        exclude: ^uv\.lock$
         require_serial: true
       - id: ruff-format
         name: Ruff formatter
