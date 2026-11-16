@@ -19,7 +19,7 @@ jobs:
       - uses: astral-sh/setup-uv@v10.3.3 # exact pin: upstream ships no floating major tags
         with:
           enable-cache: true
-      - run: uv sync --frozen --extra dev
+      - run: uv sync --locked --extra dev
       - uses: actions/cache@v6
         with:
           path: ~/.cache/pre-commit
@@ -34,5 +34,5 @@ jobs:
       - uses: astral-sh/setup-uv@v10.3.3 # exact pin: upstream ships no floating major tags
         with:
           enable-cache: true
-      - run: uv sync --frozen --extra dev
+      - run: uv sync --locked --extra dev
       - run: uv run --no-sync pytest tests/ -v --cov=digest_generator --cov-report=term-missing
